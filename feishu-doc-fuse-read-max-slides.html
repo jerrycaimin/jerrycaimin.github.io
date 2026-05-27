@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>[酷睿程] fuse read max 指标常态1s问题分析与修复方案</title>
+<link rel="stylesheet" href="../../skills/html-ppt-skill/assets/fonts.css">
+<link rel="stylesheet" href="../../skills/html-ppt-skill/assets/base.css">
+<link rel="stylesheet" href="../../skills/html-ppt-skill/assets/animations/animations.css">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d1117;--bg2:#161b22;--border:#30363d;--text-1:#e6edf3;--text-2:#8b949e;--text-3:#484f58;
+  --accent:#58a6ff;--accent-2:#3fb950;--accent-3:#f0883e;--grad:linear-gradient(135deg,#58a6ff,#a371f7);
+  --radius:10px;--shadow:0 4px 24px rgba(0,0,0,.4);
+}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--text-1);min-height:100vh}
+.deck{max-width:1100px;margin:0 auto;padding:32px 24px}
+.slide{min-height:92vh;display:flex;flex-direction:column;justify-content:center;padding:48px 56px;border-radius:var(--radius);background:var(--bg2);border:1px solid var(--border);margin-bottom:28px;position:relative;overflow:hidden}
+.slide::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--grad);opacity:.7}
+.kicker{font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--text-3);margin-bottom:14px;font-family:"JetBrains Mono",monospace}
+.h1{font-size:clamp(28px,4vw,48px);font-weight:800;line-height:1.2;margin-bottom:16px;letter-spacing:-.02em}
+.h2{font-size:clamp(20px,3vw,34px);font-weight:700;line-height:1.3;margin-bottom:20px;letter-spacing:-.01em}
+.lede{font-size:16px;color:var(--text-2);line-height:1.7;max-width:680px}
+.mt-m{margin-top:20px}.mt-l{margin-top:36px}
+.mono{font-family:"JetBrains Mono",monospace;font-size:.9em}
+.tag{display:inline-block;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:12px;color:var(--text-2);margin:4px 4px 4px 0}
+.tag.accent{background:rgba(88,166,255,.12);border-color:rgba(88,166,255,.3);color:var(--accent)}
+.tag.green{background:rgba(63,185,80,.12);border-color:rgba(63,185,80,.3);color:var(--accent-2)}
+.tag.orange{background:rgba(240,136,62,.12);border-color:rgba(240,136,62,.3);color:var(--accent-3)}
+.grid{display:grid;gap:18px}
+.g2{grid-template-columns:1fr 1fr}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}
+.card{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:24px}
+.card h4{font-size:15px;font-weight:700;margin-bottom:10px}
+.card p{font-size:13px;color:var(--text-2);line-height:1.6}
+.card.accent{border-left:3px solid var(--accent)}
+.card.green{border-left:3px solid var(--accent-2)}
+.card.orange{border-left:3px solid var(--accent-3)}
+.card.red{border-left:3px solid #f85149}
+.terminal{background:#0d1117;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.terminal .bar{background:#161b22;padding:10px 16px;display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-3)}
+.terminal .bar span{display:inline-block;width:10px;height:10px;border-radius:50%}
+.terminal .bar span:nth-child(1){background:#ff5f57}
+.terminal .bar span:nth-child(2){background:#febc2e}
+.terminal .bar span:nth-child(3){background:#28c840}
+.terminal pre{padding:20px 24px;font-family:"JetBrains Mono",monospace;font-size:13px;line-height:1.7;color:var(--text-2);overflow-x:auto}
+.terminal .kw{color:#ff7b72}.terminal .fn{color:#d2a8ff}.terminal .str{color:#a5d6ff}.terminal .cmt{color:var(--text-3)}.terminal .num{color:#79c0ff}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{background:var(--bg);text-align:left;padding:12px 16px;border-bottom:2px solid var(--border);color:var(--text-2);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.08em}
+td{padding:14px 16px;border-bottom:1px solid var(--border)}
+tr:last-child td{border-bottom:none}
+td strong{color:var(--accent-2)}
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.05em}
+.badge.new{background:rgba(63,185,80,.2);color:var(--accent-2)}
+.badge.warn{background:rgba(240,136,62,.2);color:var(--accent-3)}
+.center{text-align:center;align-items:center}
+.center .h1,.center h2{text-align:center}
+.big-num{font-size:80px;font-weight:900;color:var(--accent);line-height:1;margin-bottom:16px;font-family:"JetBrains Mono",monospace}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:start}
+.stack{display:flex;flex-direction:column;gap:10px}
+.num-badge{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:var(--accent);color:#fff;font-weight:800;font-size:16px;margin-right:12px;flex-shrink:0}
+.step-row{display:flex;align-items:flex-start;padding:16px 0;border-bottom:1px solid var(--border)}
+.step-row:last-child{border-bottom:none}
+.step-num{font-size:28px;font-weight:900;color:var(--accent);font-family:"JetBrains Mono",monospace;width:48px;flex-shrink:0;line-height:1}
+.step-content h4{font-size:15px;font-weight:700;margin-bottom:6px}
+.step-content p{font-size:13px;color:var(--text-2);line-height:1.6}
+.highlight-box{background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.3);border-radius:var(--radius);padding:20px 24px;margin-top:16px}
+.highlight-box p{color:#f85149;font-size:14px;font-weight:600;line-height:1.6}
+.slide-number{position:absolute;bottom:20px;right:28px;font-size:12px;color:var(--text-3);font-family:"JetBrains Mono",monospace}
+.deck-footer{position:absolute;bottom:20px;left:28px;font-size:12px;color:var(--text-3);font-family:"JetBrains Mono",monospace}
+.kicker .accent{color:var(--accent)}
+.kicker .green{color:var(--accent-2)}
+.kicker .orange{color:var(--accent-3)}
+.candidate{background:linear-gradient(135deg,rgba(88,166,255,.08),rgba(163,113,247,.08));border:1px solid rgba(88,166,255,.2);border-radius:var(--radius);padding:20px;margin-top:16px}
+.candidate h4{font-size:14px;font-weight:700;color:var(--text-1);margin-bottom:8px}
+.candidate p{font-size:12px;color:var(--text-2);line-height:1.6}
+.exec-flow{display:flex;gap:16px;margin-top:20px;flex-wrap:wrap}
+.exec-item{flex:1;min-width:180px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:16px;text-align:center}
+.exec-item .icon{font-size:28px;margin-bottom:8px}
+.exec-item .label{font-size:12px;color:var(--text-2)}
+.exec-item .value{font-size:16px;font-weight:700;margin-top:4px}
+.exec-item .old{text-decoration:line-through;color:#f85149}
+.exec-item .new{color:var(--accent-2)}
+.exec-item .arrow{font-size:20px;color:var(--accent);display:flex;align-items:center;justify-content:center;padding-top:20px}
+.anim-fade-up{animation:fadeUp .5s ease both}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+.anim-fade-in{animation:fadeIn .4s ease both}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.red-text{color:#f85149;font-weight:700}
+.green-text{color:var(--accent-2);font-weight:700}
+</style>
+</head>
+<body>
+<div class="deck">
+
+  <!-- Slide 1: Cover -->
+  <section class="slide center">
+    <p class="kicker">酷睿程 · 技术分享 · 2026-05-27</p>
+    <h1 class="h1 anim-fade-up" data-anim="fade-up">[酷睿程] fuse read max<br>指标常态<span style="background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent">1秒</span>问题分析与修复方案</h1>
+    <p class="lede mt-m" style="text-align:center">客户端与 Meta 通讯超时导致误计入延迟统计，调优超时参数可还原真实业务延迟</p>
+    <div style="margin-top:40px;display:flex;gap:16px;justify-content:center;flex-wrap:wrap">
+      <span class="tag accent">JuiceFS</span>
+      <span class="tag accent">fuse read max</span>
+      <span class="tag accent">超时调优</span>
+      <span class="tag accent">v5.3.x</span>
+    </div>
+    <div class="deck-footer">Jerry Cai · JuiceFS</div>
+    <span class="slide-number">1 / 7</span>
+  </section>
+
+  <!-- Slide 2: Problem Overview -->
+  <section class="slide">
+    <p class="kicker">// problem overview</p>
+    <h2 class="h2">问题现象</h2>
+    <div class="card orange mt-m">
+      <h4>症状</h4>
+      <p>JuiceFS 客户端的 <span class="mono">fuse read max</span> 指标长期、常态化出现固定的 <span class="red-text">1 秒</span> 数值。</p>
+    </div>
+    <div class="grid g3 mt-l">
+      <div class="card">
+        <h4>影响范围</h4>
+        <p>影响客户对数据真实度的判断，干扰长尾延迟问题排查。</p>
+      </div>
+      <div class="card">
+        <h4>实际影响</h4>
+        <p>不影响实际 max 到几十秒的甄别，但掩盖了真实尾延迟。</p>
+      </div>
+      <div class="card">
+        <h4>问题性质</h4>
+        <p>指标误报，非真实业务延迟，但长期存在让客户困扰。</p>
+      </div>
+    </div>
+    <div class="highlight-box mt-l">
+      <p>⚠️ 这个 1 秒不是 Meta 或存储真正存在延迟，而是超时等待被错误地计入了延迟统计。</p>
+    </div>
+    <span class="slide-number">2 / 7</span>
+  </section>
+
+  <!-- Slide 3: Root Cause -->
+  <section class="slide">
+    <p class="kicker">// root cause</p>
+    <h2 class="h2">根因定位：FUSE Read 三个阶段</h2>
+    <p class="lede">一次完整的 FUSE Read 操作包含三个阶段：</p>
+    <div class="exec-flow mt-l">
+      <div class="exec-item">
+        <div class="icon">🧠</div>
+        <div class="label">阶段一</div>
+        <div class="value" style="font-size:14px;color:var(--text-1)">向 Meta 请求<br>Chunk 元数据</div>
+        <div style="margin-top:8px"><span class="badge warn">问题在此</span></div>
+      </div>
+      <div class="exec-item" style="padding-top:28px;font-size:28px;color:var(--text-3)">→</div>
+      <div class="exec-item">
+        <div class="icon">⚙️</div>
+        <div class="label">阶段二</div>
+        <div class="value" style="font-size:14px;color:var(--text-1)">限流检查</div>
+      </div>
+      <div class="exec-item" style="padding-top:28px;font-size:28px;color:var(--text-3)">→</div>
+      <div class="exec-item">
+        <div class="icon">📖</div>
+        <div class="label">阶段三</div>
+        <div class="value" style="font-size:14px;color:var(--text-1)">读取真实数据<br>（毫秒级）</div>
+        <div style="margin-top:8px"><span class="badge new">正常</span></div>
+      </div>
+    </div>
+    <div class="card mt-l" style="border-left:3px solid var(--accent-3)">
+      <h4>关键发现</h4>
+      <p>客户端与 Meta 之间通讯超时为 <span class="red-text">1 秒</span>（历史遗留值，缺乏实际场景依据）。正常延迟在 <span class="green-text">亚毫秒～100 毫秒</span> 级别。</p>
+    </div>
+    <span class="slide-number">3 / 7</span>
+  </section>
+
+  <!-- Slide 4: Why 1s -->
+  <section class="slide">
+    <p class="kicker">// why always 1s</p>
+    <h2 class="h2">为什么 fuse read max 长期固定在 1 秒？</h2>
+    <div class="two-col mt-l">
+      <div>
+        <div class="card mt-m">
+          <h4>单挂载点层面</h4>
+          <p>当 Meta 响应因网络丢包或延迟未能及时返回时，客户端等待整整 <span class="red-text">1 秒</span> 后才重试。</p>
+        </div>
+        <div class="card mt-m accent">
+          <h4>集群级别汇聚</h4>
+          <p>多个客户端汇聚到集群级别时，<span class="green-text">几乎每个时刻都至少有一个客户端在等待 Meta 超时（1秒）</span>。</p>
+        </div>
+      </div>
+      <div>
+        <div class="card orange">
+          <h4>结论</h4>
+          <p class="red-text" style="font-size:15px;font-weight:700;line-height:1.6">超时等待被错误地计入了延迟统计，导致 fuse read max 始终为 1 秒。这并非 Meta 或存储真正存在 1 秒延迟。</p>
+        </div>
+        <div class="candidate mt-m">
+          <h4>📊 真实延迟分布</h4>
+          <p>亚毫秒 ～ 100ms（能覆盖极值情况），1 秒是人为设置的超时，不反映真实业务。</p>
+        </div>
+      </div>
+    </div>
+    <span class="slide-number">4 / 7</span>
+  </section>
+
+  <!-- Slide 5: Solution -->
+  <section class="slide">
+    <p class="kicker">// solution</p>
+    <h2 class="h2">解决方案：调优超时参数</h2>
+    <p class="lede">将代码中的超时等待从 <span class="red-text" style="font-family:monospace">1 秒</span> 调整为更符合实际的 <span class="green-text" style="font-family:monospace">100ms</span>。</p>
+    <table class="mt-l">
+      <thead>
+        <tr>
+          <th>通讯对象</th>
+          <th>原超时</th>
+          <th>调优后</th>
+          <th>调整幅度</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>客户端 ↔ Meta 元数据通讯</td>
+          <td><span class="red-text mono">1000 ms</span></td>
+          <td><span class="green-text mono" style="font-size:16px;font-weight:700">100 ms</span></td>
+          <td><span class="badge warn">↓ 90%</span></td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="grid g3 mt-l">
+      <div class="card green">
+        <h4>✅ 指标还原</h4>
+        <p>fuse read max 从长期 1000ms 降至 100ms 左右，恢复真实水平。</p>
+      </div>
+      <div class="card green">
+        <h4>✅ 问题浮出</h4>
+        <p>真正超过 100ms 的尾延迟尖刺将浮出水面，便于精确定位网络或 Meta 问题。</p>
+      </div>
+      <div class="card">
+        <h4>✅ 潜在收益</h4>
+        <p>可能带来小幅业务性能提升（待验证，因为没改值时业务没有喊慢）。</p>
+      </div>
+    </div>
+    <div style="margin-top:24px;text-align:center">
+      <span class="badge new" style="font-size:14px;padding:8px 20px">修复版本：v5.3.x（开发中）</span>
+    </div>
+    <span class="slide-number">5 / 7</span>
+  </section>
+
+  <!-- Slide 6: Summary -->
+  <section class="slide">
+    <p class="kicker">// summary</p>
+    <h2 class="h2">回顾：三件事带回去</h2>
+    <div class="stack mt-l">
+      <div class="step-row">
+        <div class="step-num">01</div>
+        <div class="step-content">
+          <h4>问题现象不是真实原因</h4>
+          <p>fuse read max 常态 1 秒，是因为超时等待被误计入延迟统计，并非 Meta/存储真的有 1 秒延迟。</p>
+        </div>
+      </div>
+      <div class="step-row">
+        <div class="step-num">02</div>
+        <div class="step-content">
+          <h4>根因是超时参数过大</h4>
+          <p>代码中大量使用 1 秒作为默认超时（历史遗留值），而实际通讯延迟在亚毫秒～100ms 级别。</p>
+        </div>
+      </div>
+      <div class="step-row">
+        <div class="step-num">03</div>
+        <div class="step-content">
+          <h4>解决方案简单直接</h4>
+          <p>将超时从 1000ms 调整为 100ms，v5.3.x 修复。调优后可还原真实业务延迟，让真正的尾延迟问题无处遁形。</p>
+        </div>
+      </div>
+    </div>
+    <span class="slide-number">6 / 7</span>
+  </section>
+
+  <!-- Slide 7: Q&A -->
+  <section class="slide center">
+    <div>
+      <div class="big-num anim-fade-up" data-anim="fade-up">?</div>
+      <h2 class="h2">Questions &amp; Discussion</h2>
+      <p class="lede" style="text-align:center;margin:14px auto">欢迎提问交流！</p>
+      <div style="margin-top:32px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+        <span class="tag">JuiceFS</span>
+        <span class="tag">fuse read max</span>
+        <span class="tag">超时调优</span>
+        <span class="tag">v5.3.x</span>
+      </div>
+    </div>
+    <div class="deck-footer">Jerry Cai · JuiceFS · 2026-05-27</div>
+    <span class="slide-number">7 / 7</span>
+  </section>
+
+</div>
+<script src="../../skills/html-ppt-skill/assets/runtime.js"></script>
+</body>
+</html>

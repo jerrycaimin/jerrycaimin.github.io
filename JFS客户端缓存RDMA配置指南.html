@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JFS 客户端缓存 RDMA 配置指南</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+      background: #f0f2f5;
+      color: #1a1a2e;
+      line-height: 1.7;
+    }
+    .hero {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      color: white;
+      padding: 56px 40px 40px;
+      text-align: center;
+    }
+    .hero h1 { font-size: 2.2rem; font-weight: 700; letter-spacing: -0.5px; }
+    .hero .subtitle { margin-top: 10px; color: #a0c4ff; font-size: 1rem; }
+    .hero .badge {
+      display: inline-block;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.25);
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 0.78rem;
+      margin-top: 14px;
+      color: #e0e0e0;
+    }
+
+    .container { max-width: 1000px; margin: 0 auto; padding: 32px 20px 60px; }
+
+    /* TL;DR box */
+    .tldr {
+      background: #fff;
+      border-left: 5px solid #0f3460;
+      border-radius: 0 12px 12px 0;
+      padding: 20px 24px;
+      margin: 0 0 32px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+    }
+    .tldr h2 { color: #0f3460; font-size: 1.05rem; margin-bottom: 12px; }
+    .tldr ul { padding-left: 20px; }
+    .tldr ul li { margin-bottom: 6px; }
+    .tldr code {
+      background: #eef2ff;
+      color: #3730a3;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-family: "JetBrains Mono", "Fira Code", monospace;
+      font-size: 0.88em;
+    }
+
+    /* Section cards */
+    .card {
+      background: #fff;
+      border-radius: 14px;
+      padding: 28px 30px;
+      margin-bottom: 24px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+    }
+    .card h2 {
+      font-size: 1.18rem;
+      font-weight: 700;
+      color: #0f3460;
+      margin-bottom: 18px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #e8ecf5;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .card h2 .icon { font-size: 1.3rem; }
+    .card h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #16213e;
+      margin: 18px 0 10px;
+    }
+    p { margin-bottom: 12px; color: #374151; }
+
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 0.9rem; }
+    thead tr { background: #0f3460; color: white; }
+    thead th { padding: 10px 14px; text-align: left; font-weight: 600; }
+    tbody tr { border-bottom: 1px solid #e8ecf5; }
+    tbody tr:nth-child(even) { background: #f8f9ff; }
+    td { padding: 9px 14px; vertical-align: top; }
+    td code {
+      background: #eef2ff;
+      color: #3730a3;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-family: "JetBrains Mono", "Fira Code", monospace;
+      font-size: 0.86em;
+      white-space: nowrap;
+    }
+
+    /* Code blocks */
+    pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      border-radius: 10px;
+      padding: 18px 20px;
+      overflow-x: auto;
+      font-family: "JetBrains Mono", "Fira Code", monospace;
+      font-size: 0.85rem;
+      line-height: 1.7;
+      margin: 14px 0;
+    }
+    pre .comment { color: #64748b; }
+    pre .env { color: #7dd3fc; }
+    pre .flag { color: #86efac; }
+    pre .val { color: #fcd34d; }
+    pre .cmd { color: #f472b6; }
+
+    /* Flow diagram */
+    .flow {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      margin: 14px 0;
+    }
+    .flow-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+    }
+    .flow-line {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-width: 36px;
+    }
+    .flow-dot {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: #0f3460;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.9rem;
+      flex-shrink: 0;
+    }
+    .flow-connector {
+      width: 2px;
+      flex: 1;
+      background: #cbd5e1;
+      min-height: 20px;
+    }
+    .flow-content {
+      padding: 6px 0 22px;
+      flex: 1;
+    }
+    .flow-content strong { color: #0f3460; }
+    .flow-content p { margin: 4px 0; font-size: 0.92rem; }
+
+    /* Alert boxes */
+    .alert {
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin: 14px 0;
+      font-size: 0.92rem;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .alert-icon { font-size: 1.2rem; flex-shrink: 0; }
+    .alert-warn { background: #fffbeb; border: 1px solid #fbbf24; }
+    .alert-warn .alert-icon { color: #f59e0b; }
+    .alert-info { background: #eff6ff; border: 1px solid #93c5fd; }
+    .alert-info .alert-icon { color: #3b82f6; }
+    .alert-ok { background: #f0fdf4; border: 1px solid #86efac; }
+    .alert-ok .alert-icon { color: #22c55e; }
+    .alert-err { background: #fef2f2; border: 1px solid #fca5a5; }
+    .alert-err .alert-icon { color: #ef4444; }
+
+    /* Decision tree */
+    .decision-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin: 14px 0;
+    }
+    .decision-box {
+      border-radius: 10px;
+      padding: 16px;
+      border: 2px solid;
+    }
+    .decision-box.svr {
+      background: #f0f9ff;
+      border-color: #38bdf8;
+    }
+    .decision-box.cli {
+      background: #faf5ff;
+      border-color: #c084fc;
+    }
+    .decision-box h4 {
+      font-size: 0.9rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .decision-box.svr h4 { color: #0369a1; }
+    .decision-box.cli h4 { color: #7c3aed; }
+    .decision-box ul { padding-left: 18px; font-size: 0.88rem; }
+    .decision-box ul li { margin-bottom: 5px; }
+
+    /* Source ref */
+    .src-ref {
+      display: inline-block;
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 1px 8px;
+      font-size: 0.78rem;
+      color: #64748b;
+      font-family: "JetBrains Mono", monospace;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+
+    /* Checklist */
+    .checklist { list-style: none; padding: 0; }
+    .checklist li {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      padding: 8px 0;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .checklist li:last-child { border-bottom: none; }
+    .check-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
+    .check-label { font-size: 0.92rem; }
+    .check-label code {
+      background: #eef2ff;
+      color: #3730a3;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.86em;
+    }
+
+    @media (max-width: 640px) {
+      .decision-grid { grid-template-columns: 1fr; }
+      .hero h1 { font-size: 1.6rem; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>JFS 客户端缓存 RDMA 配置指南</h1>
+  <div class="subtitle">分布式缓存组（Cache Group）中启用 IORPC 与 RDMA 的完整说明</div>
+  <div class="badge">基于源码分析 · jfs @ 2026-05-27</div>
+</div>
+
+<div class="container">
+
+  <!-- TL;DR -->
+  <div class="tldr">
+    <h2>⚡ 快速结论（TL;DR）</h2>
+    <ul>
+      <li><strong>IORPC 服务端</strong>（Server）：只要加入了缓存组（<code>--cache-group</code>），IORPC 服务端就会<strong>自动启动</strong>，无需额外配置。</li>
+      <li><strong>IORPC 客户端</strong>（Client）：<strong>必须</strong>设置 <code>JFS_ENABLE_IORPC_CLI=1</code> 才会启用，否则读取对端缓存仍走旧协议。</li>
+      <li><strong>RDMA 支持</strong>：需要 <strong>RDMA 版本的二进制</strong>（编译时不含 <code>nordma</code> tag），且 <code>JFS_RDMA_DISABLED ≠ 1</code>。</li>
+      <li><strong><code>--rdma-network eth0</code></strong>：指定 RDMA 绑定哪块网卡，若省略但二进制支持 RDMA，则使用 group IP 地址作为默认 RDMA 地址。</li>
+      <li>单独指定 <code>--rdma-network eth0</code> 并<strong>不会</strong>自动开启客户端 IORPC，必须配合 <code>JFS_ENABLE_IORPC_CLI=1</code>。</li>
+    </ul>
+  </div>
+
+  <!-- 1. 系统架构 -->
+  <div class="card">
+    <h2><span class="icon">🏗️</span>1. 整体架构：IORPC 与 RDMA 的分层关系</h2>
+
+    <p>JFS 的分布式缓存（Cache Group）依赖两个子系统：</p>
+
+    <table>
+      <thead>
+        <tr><th>子系统</th><th>职责</th><th>传输层</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>IORPC</strong></td>
+          <td>节点间缓存读写的应用层 RPC 框架，取代旧的 HTTP peer 协议，支持零拷贝路径</td>
+          <td>TCP 或 RDMA（可选）</td>
+        </tr>
+        <tr>
+          <td><strong>RDMA</strong></td>
+          <td>IORPC 的高性能传输层，提供绕过内核的零拷贝数据通道</td>
+          <td>InfiniBand / RoCE 硬件</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="alert alert-info">
+      <span class="alert-icon">ℹ️</span>
+      <div><strong>IORPC 与 RDMA 是独立的开关</strong>：IORPC 可以跑在纯 TCP 上；只有当二进制支持 RDMA 且 RDMA 设备存在时，IORPC 才会选择 RDMA 传输。两者的客户端/服务端也是独立控制的。</div>
+    </div>
+  </div>
+
+  <!-- 2. 前置条件 -->
+  <div class="card">
+    <h2><span class="icon">⚙️</span>2. 前置条件</h2>
+
+    <h3>2.1 二进制构建版本</h3>
+    <p>JFS 使用 Go 构建标签（build tag）控制 RDMA 支持：</p>
+
+    <table>
+      <thead>
+        <tr><th>构建标签</th><th>包含 RDMA</th><th>说明</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>不含 <code>nordma</code></td>
+          <td>✅ 是</td>
+          <td>标准 RDMA 版本，依赖 <code>libibverbs</code>、<code>librdmacm</code></td>
+        </tr>
+        <tr>
+          <td>含 <code>nordma</code></td>
+          <td>❌ 否</td>
+          <td><code>RDMAEnabled = false</code>，所有 RDMA 代码为空桩（stub）</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>源码关键文件：</p>
+    <ul style="padding-left:20px; font-size:0.92rem; color:#374151;">
+      <li><code>pkg/common/alloc_rdma.go</code> <span class="src-ref">build: !nordma</span> — RDMA 内存分配器，设置 <code>RDMAEnabled = true</code></li>
+      <li><code>pkg/common/rdma_stub.go</code> <span class="src-ref">build: nordma</span> — 空实现，<code>RDMAEnabled = false</code></li>
+      <li><code>pkg/rdma/rdma.go</code> <span class="src-ref">build: !nordma && linux</span> — 实际 RDMA 实现，链接 ibverbs/rdmacm</li>
+      <li><code>pkg/rdma/stub.go</code> <span class="src-ref">build: nordma || !linux</span> — Linux 以外的空桩</li>
+    </ul>
+
+    <div class="alert alert-warn">
+      <span class="alert-icon">⚠️</span>
+      <div>
+        如果当前运行的 mount 二进制不含 RDMA 支持，但指定了 <code>--rdma-network</code>，代码会触发 <code>addSupport("rdma")</code>，自动从远端下载 RDMA 版本的 mount 并替换执行（见 <code>cmd/mount/mount.go</code> <code>checkSupport()</code>）。
+      </div>
+    </div>
+
+    <h3>2.2 硬件与内核准备</h3>
+    <pre><span class="comment"># 检查 RDMA NIC 是否存在</span>
+<span class="cmd">rdma link show</span>
+
+<span class="comment"># 如果只有普通以太网，可以用 RXE（软件模拟 RDMA）测试</span>
+<span class="cmd">sudo modprobe rdma_rxe</span>
+<span class="cmd">sudo rdma link add rxe0 type rxe netdev eth0</span>
+
+<span class="comment"># 确认内核驱动已加载</span>
+<span class="cmd">lsmod | grep ib_core</span></pre>
+
+    <h3>2.3 系统库</h3>
+    <pre><span class="comment"># Ubuntu / Debian</span>
+<span class="cmd">apt install libibverbs1 librdmacm1 ibverbs-utils rdma-core</span>
+
+<span class="comment"># CentOS / RHEL</span>
+<span class="cmd">yum install libibverbs librdmacm rdma-core</span></pre>
+  </div>
+
+  <!-- 3. 控制开关详解 -->
+  <div class="card">
+    <h2><span class="icon">🔧</span>3. 所有控制开关详解</h2>
+
+    <h3>3.1 挂载参数（mount flags）</h3>
+    <table>
+      <thead>
+        <tr><th>参数</th><th>类型</th><th>说明</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>--cache-group &lt;name&gt;</code></td>
+          <td>必选</td>
+          <td>加入分布式缓存组，是启用 IORPC Server 的前提。不指定则不参与组，也不启动 IORPC。</td>
+        </tr>
+        <tr>
+          <td><code>--rdma-network eth0</code></td>
+          <td>可选，隐藏参数</td>
+          <td>指定 RDMA 服务端绑定的网卡名（冒号分隔多网卡）。若省略而二进制支持 RDMA，则以 group IP 作为 RDMA 监听地址。</td>
+        </tr>
+        <tr>
+          <td><code>--group-network eth0</code></td>
+          <td>可选</td>
+          <td>指定分布式缓存使用的网卡（用于发现 group IP，非 RDMA 专用）。</td>
+        </tr>
+        <tr>
+          <td><code>--group-port &lt;port&gt;</code></td>
+          <td>可选</td>
+          <td>指定监听端口，默认随机端口。</td>
+        </tr>
+        <tr>
+          <td><code>--cache-try-dio</code></td>
+          <td>可选，隐藏参数，Linux 专用</td>
+          <td>IORPC Server 启用 DIO 模式读取缓存文件（减少一次内存拷贝）。</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>3.2 环境变量</h3>
+    <table>
+      <thead>
+        <tr><th>环境变量</th><th>默认值</th><th>说明</th><th>源文件</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>JFS_RDMA_DISABLED=1</code></td>
+          <td>未设置（RDMA 启用）</td>
+          <td>强制禁用 RDMA，即使二进制支持 RDMA 也不使用。设为 <code>1</code> 时 <code>RDMAEnabled=false</code>，RDMA 内存池不初始化，IORPC 只用 TCP。</td>
+          <td><code>pkg/common/alloc_rdma.go</code></td>
+        </tr>
+        <tr>
+          <td><code>JFS_DISABLE_IORPC_SVR=1</code></td>
+          <td>未设置（Server 启用）</td>
+          <td>完全禁用 IORPC 服务端。设置后所有节点降级为旧的 HTTP peer 模式，不公告 RPC 地址。</td>
+          <td><code>pkg/fs/peer_rpc.go</code></td>
+        </tr>
+        <tr>
+          <td><code>JFS_ENABLE_IORPC_CLI=1</code></td>
+          <td>未设置（Client 禁用）</td>
+          <td><strong>必须设置才能启用 IORPC 客户端</strong>。设置后，连接对端时先查询其 IORPC 地址，优先选择 RDMA 传输，否则选 TCP。版本要求 ≥ 5.2.0。</td>
+          <td><code>pkg/fs/peer.go</code></td>
+        </tr>
+        <tr>
+          <td><code>JFS_IORPC_MODE=splice</code></td>
+          <td>pagecache</td>
+          <td>IORPC Server 的数据读取模式。<code>splice</code> 仅在 pipe ≥ 8 MiB 且无 RDMA 时生效；其余情况均为 <code>pagecache</code>。设置 <code>--cache-try-dio</code> 后会覆盖为 <code>dio</code> 模式。</td>
+          <td><code>pkg/fs/peer_rpc.go</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 4. 启动逻辑流程 -->
+  <div class="card">
+    <h2><span class="icon">🔄</span>4. 启动时的决策流程（源码逻辑）</h2>
+
+    <div class="decision-grid">
+      <div class="decision-box svr">
+        <h4>🖥️ IORPC 服务端（Server Side）</h4>
+        <ul>
+          <li>加入缓存组（<code>--cache-group</code>）且 <code>NoSharing=false</code></li>
+          <li><code>iorpcServerMode != "disable"</code>（默认 = <code>pagecache</code>）</li>
+          <li>若 <code>JFS_DISABLE_IORPC_SVR=1</code> → 跳过，Server 不启动</li>
+          <li>若 <code>RDMAEnabled=true</code>：<br>
+            • 有 <code>--rdma-network eth0</code> → 解析网卡 IP 作为 RDMA 监听地址<br>
+            • 无 <code>--rdma-network</code> → 使用 group IP 作为 RDMA 监听地址<br>
+            • 启动 <strong>Hybrid Server</strong>（TCP + RDMA 双监听）</li>
+          <li>若 <code>RDMAEnabled=false</code>：启动纯 TCP IORPC Server</li>
+        </ul>
+      </div>
+      <div class="decision-box cli">
+        <h4>💻 IORPC 客户端（Client Side）</h4>
+        <ul>
+          <li>检查 <code>JFS_ENABLE_IORPC_CLI=1</code>，否则直接返回（走旧协议）</li>
+          <li>检查对端版本 ≥ 5.2.0，否则跳过</li>
+          <li>调用 <code>getRPCAddr</code> 查询对端 IORPC 地址（Endpoints 列表）</li>
+          <li>优先选择 RDMA endpoint：<br>
+            • 需要 <code>RDMAEnabled=true</code><br>
+            • 需要本机有已初始化的 RDMA 设备（<code>len(rdma.ListRDMADevs()) > 0</code>）<br>
+            • 两者满足 → 创建 <code>iorpc.NewRDMAClient</code></li>
+          <li>否则选择 TCP endpoint → 创建 <code>iorpc.NewTCPClient</code></li>
+        </ul>
+      </div>
+    </div>
+
+    <p style="margin-top:10px;">对应的核心代码路径：</p>
+    <pre><span class="comment">// Server 启动（pkg/fs/peer.go, initialize pool）</span>
+<span class="cmd">if</span> iorpcServerMode != "disable" {
+    rdmaAddrs := []string{}
+    <span class="cmd">if</span> common.RDMAEnabled {
+        <span class="cmd">if</span> conf.RDMANetwork == "" {
+            rdmaAddrs = []string{fmt.Sprintf("%s:0", ip)}  <span class="comment">// 使用 group IP</span>
+        } <span class="cmd">else</span> {
+            <span class="comment">// 解析每块 rdma-network 网卡的 IP</span>
+        }
+    }
+    pool.serveIORPC(tcpAddr, rdmaAddrs, listenTCP)  <span class="comment">// 启动 Hybrid Server</span>
+}
+
+<span class="comment">// Client 启动（pkg/fs/peer.go, peer.test()）</span>
+<span class="cmd">if</span> os.Getenv("JFS_ENABLE_IORPC_CLI") == "1" &amp;&amp; h.version >= common.Ver2Int(5,2,0) {
+    addr, _ := h.getRPCAddr()                  <span class="comment">// 查询对端 IORPC 地址</span>
+    <span class="comment">// 优先 RDMA，需本机 RDMAEnabled 且有 RDMA 设备</span>
+    <span class="cmd">if</span> ep.Transport == ServerTransport_RDMA {
+        <span class="cmd">if</span> common.RDMAEnabled &amp;&amp; len(rdma.ListRDMADevs()) > 0 {
+            cli = iorpc.NewRDMAClient(ep.Address, ...)
+        }
+    }
+}</pre>
+
+    <pre><span class="comment">// IORPC Server 模式初始化（pkg/fs/peer_rpc.go, init()）</span>
+<span class="cmd">func</span> init() {
+    <span class="cmd">if</span> os.Getenv("JFS_DISABLE_IORPC_SVR") == "1" {
+        iorpcServerMode = "disable"
+    } <span class="cmd">else</span> {
+        ps := splice.MaxPipeSize()
+        <span class="cmd">if</span> v := os.Getenv("JFS_IORPC_MODE"); v == "splice" &amp;&amp; ps >= 8MiB &amp;&amp; !RDMAEnabled {
+            iorpcServerMode = "splice"
+        } <span class="cmd">else</span> {
+            iorpcServerMode = "pagecache"   <span class="comment">// 默认值</span>
+        }
+    }
+}</pre>
+
+    <pre><span class="comment">// RDMA 初始化（pkg/rdma/rdma.go, rdma.Init()）</span>
+<span class="cmd">func</span> Init(network string) {
+    <span class="cmd">if</span> !common.RDMAEnabled { <span class="cmd">return</span> }   <span class="comment">// 无 RDMA 版本 / 被禁用时直接跳过</span>
+    <span class="comment">// 解析 rdma-network 指定的网卡 → 查找对应 IB 设备</span>
+    <span class="comment">// 初始化所有 RDMA 设备（ibv_alloc_pd 等）</span>
+    <span class="comment">// 注册内存回调，后续分配的内存自动注册到所有 RDMA 设备</span>
+}</pre>
+  </div>
+
+  <!-- 5. 配置场景 -->
+  <div class="card">
+    <h2><span class="icon">📋</span>5. 常见配置场景</h2>
+
+    <h3>场景 A：仅启用 IORPC（TCP 传输，不用 RDMA）</h3>
+    <p>适合没有 RDMA 硬件，但希望获得 IORPC 零拷贝路径优化（sendfile / DIO）的环境。</p>
+    <pre><span class="comment"># 所有节点挂载时加相同参数</span>
+mount <span class="flag">--cache-group</span> <span class="val">mygroup</span> \
+      <span class="flag">--group-network</span> <span class="val">eth0</span> \
+      [其他参数...] fs /mnt/jfs
+
+<span class="comment"># 同时设置环境变量（所有节点一致）</span>
+<span class="env">JFS_ENABLE_IORPC_CLI</span>=<span class="val">1</span>   <span class="comment"># 启用客户端 IORPC（否则读缓存仍走旧协议）</span>
+<span class="env">JFS_RDMA_DISABLED</span>=<span class="val">1</span>      <span class="comment"># 明确关闭 RDMA，避免误触发</span></pre>
+
+    <div class="alert alert-info">
+      <span class="alert-icon">ℹ️</span>
+      <div>IORPC Server 会自动启动（不需要额外变量）。只需要 <code>JFS_ENABLE_IORPC_CLI=1</code> 让客户端知道要用 IORPC 协议去读对端缓存。</div>
+    </div>
+
+    <h3>场景 B：完整 RDMA 路径（IORPC + RDMA 传输）</h3>
+    <p>需要 RDMA 硬件 + RDMA 版本的 mount 二进制。</p>
+    <pre><span class="comment"># 验证 RDMA 设备可用</span>
+rdma link show           <span class="comment"># 应看到 Active 的 link</span>
+
+<span class="comment"># 挂载时指定 rdma-network（也可以不指定，会用 group IP）</span>
+mount <span class="flag">--cache-group</span> <span class="val">mygroup</span> \
+      <span class="flag">--group-network</span> <span class="val">eth0</span> \
+      <span class="flag">--rdma-network</span> <span class="val">eth0</span> \   <span class="comment"># RDMA 专用网卡，也可以 eth0:eth1 多网卡</span>
+      [其他参数...] fs /mnt/jfs
+
+<span class="comment"># 环境变量</span>
+<span class="env">JFS_ENABLE_IORPC_CLI</span>=<span class="val">1</span>   <span class="comment"># 必须：启用客户端 IORPC</span>
+<span class="comment"># JFS_RDMA_DISABLED 不设置（默认启用 RDMA）</span></pre>
+
+    <h3>场景 C：只想关闭所有 IORPC（退回旧协议）</h3>
+    <pre><span class="env">JFS_DISABLE_IORPC_SVR</span>=<span class="val">1</span>    <span class="comment"># 禁用 Server，节点不再公告 IORPC 地址</span>
+<span class="comment"># 不设置 JFS_ENABLE_IORPC_CLI（默认未启用），Client 自然不会用 IORPC</span></pre>
+
+    <h3>场景 D：DIO 模式（减少读缓存文件的内存拷贝）</h3>
+    <pre>mount <span class="flag">--cache-group</span> <span class="val">mygroup</span> \
+      <span class="flag">--cache-try-dio</span> \    <span class="comment"># 隐藏参数，Linux only</span>
+      [其他参数...] fs /mnt/jfs
+
+<span class="env">JFS_ENABLE_IORPC_CLI</span>=<span class="val">1</span></pre>
+
+    <p><code>--cache-try-dio</code> 会将 iorpcServerMode 从 <code>pagecache</code> 覆盖为 <code>dio</code>，Server 直接用 O_DIRECT 读取磁盘缓存文件，避免 page cache 拷贝。</p>
+  </div>
+
+  <!-- 6. 关键问题解答 -->
+  <div class="card">
+    <h2><span class="icon">❓</span>6. 关键问题解答</h2>
+
+    <h3>Q1：只指定 <code>--rdma-network eth0</code>，不设置 <code>JFS_ENABLE_IORPC_CLI=1</code>，会有 RDMA 效果吗？</h3>
+    <div class="alert alert-err">
+      <span class="alert-icon">❌</span>
+      <div>
+        <strong>客户端没有 RDMA 效果</strong>。<code>--rdma-network</code> 只控制 IORPC <strong>Server 侧</strong>的 RDMA 监听地址。客户端（读取对端缓存）必须通过 <code>JFS_ENABLE_IORPC_CLI=1</code> 启用，才会在连接时查询并使用对端的 RDMA 地址。<br><br>
+        Server 侧：RDMA 监听已启动 ✅<br>
+        Client 侧：仍走旧 HTTP peer 协议，完全不经过 IORPC/RDMA ❌
+      </div>
+    </div>
+
+    <h3>Q2：<code>JFS_ENABLE_IORPC_CLI=1</code> 是否也会自动启用 RDMA？</h3>
+    <div class="alert alert-info">
+      <span class="alert-icon">ℹ️</span>
+      <div>
+        <code>JFS_ENABLE_IORPC_CLI=1</code> 启用 IORPC 客户端后，会<strong>优先</strong>选择 RDMA 传输，但需同时满足：<br>
+        ① 本机二进制支持 RDMA（<code>!nordma</code> 编译）<br>
+        ② <code>JFS_RDMA_DISABLED ≠ 1</code><br>
+        ③ 本机已初始化至少一个 RDMA 设备（<code>rdma.ListRDMADevs() > 0</code>）<br>
+        ④ 对端 Server 公告了 RDMA endpoint<br><br>
+        若条件不满足，自动降级为 TCP IORPC。
+      </div>
+    </div>
+
+    <h3>Q3：IORPC Server 会自动启动吗？需要额外配置吗？</h3>
+    <div class="alert alert-ok">
+      <span class="alert-icon">✅</span>
+      <div>
+        <strong>是，自动启动</strong>。只要加入了缓存组（<code>--cache-group</code>）且 <code>JFS_DISABLE_IORPC_SVR ≠ 1</code>，IORPC Server 就会随挂载自动启动（默认 <code>pagecache</code> 模式）。无需额外变量。
+      </div>
+    </div>
+
+    <h3>Q4：<code>--rdma-network</code> 可以省略吗？</h3>
+    <div class="alert alert-info">
+      <span class="alert-icon">ℹ️</span>
+      <div>
+        可以省略。若省略且 RDMA 二进制支持，Server 会以 <code>&lt;group_ip&gt;:0</code> 作为 RDMA 监听地址（group_ip 由 <code>--group-ip</code> 或 <code>--group-network</code> 决定）。<br>
+        指定 <code>--rdma-network</code> 的好处是可以明确指定走哪块 RDMA 专用网卡（比如 RoCE 卡在 eth1，不是 group 通信用的 eth0），避免用错网卡。
+      </div>
+    </div>
+
+    <h3>Q5：<code>JFS_IORPC_MODE=splice</code> 和 RDMA 能同时用吗？</h3>
+    <div class="alert alert-warn">
+      <span class="alert-icon">⚠️</span>
+      <div>
+        <strong>不能同时使用</strong>。代码中 <code>splice</code> 模式有检查 <code>!common.RDMAEnabled</code>，开启 RDMA 后 <code>splice</code> 模式自动失效，Server 降级为 <code>pagecache</code> 模式。RDMA 本身已是零拷贝，不需要 splice。
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. 部署检查清单 -->
+  <div class="card">
+    <h2><span class="icon">✅</span>7. 部署检查清单</h2>
+
+    <h3>纯 IORPC（TCP）部署</h3>
+    <ul class="checklist">
+      <li><span class="check-icon">📦</span><div class="check-label">mount 二进制无特殊要求（任意版本），建议 ≥ 5.2.0 以支持 IORPC 协议协商</div></li>
+      <li><span class="check-icon">🔧</span><div class="check-label">挂载参数包含 <code>--cache-group &lt;name&gt;</code>（所有节点使用同一 group 名）</div></li>
+      <li><span class="check-icon">🌍</span><div class="check-label">环境变量设置 <code>JFS_ENABLE_IORPC_CLI=1</code>（所有节点一致）</div></li>
+      <li><span class="check-icon">🔥</span><div class="check-label">防火墙放通 IORPC 端口（group-port，默认随机，建议固定 <code>--group-port 2000</code>）</div></li>
+      <li><span class="check-icon">📊</span><div class="check-label">查看日志 <code>IO rpc server listened at:</code> 确认 Server 已启动</div></li>
+    </ul>
+
+    <h3 style="margin-top:18px;">RDMA 部署（额外检查项）</h3>
+    <ul class="checklist">
+      <li><span class="check-icon">🖥️</span><div class="check-label">RDMA NIC 已安装，驱动已加载（<code>rdma link show</code> 可见 Active 设备）</div></li>
+      <li><span class="check-icon">📦</span><div class="check-label">使用 RDMA 版本的 mount 二进制（编译时不含 <code>nordma</code>），或指定 <code>--rdma-network</code> 触发自动下载</div></li>
+      <li><span class="check-icon">📚</span><div class="check-label">安装系统库：<code>libibverbs1 librdmacm1 rdma-core</code></div></li>
+      <li><span class="check-icon">🔧</span><div class="check-label">挂载参数加 <code>--rdma-network eth0</code>（eth0 替换为实际 RDMA 网卡名，多网卡用冒号分隔）</div></li>
+      <li><span class="check-icon">🌍</span><div class="check-label">环境变量 <code>JFS_ENABLE_IORPC_CLI=1</code>（启用客户端）</div></li>
+      <li><span class="check-icon">⛔</span><div class="check-label">确认 <code>JFS_RDMA_DISABLED</code> 未被设置为 <code>1</code></div></li>
+      <li><span class="check-icon">🔥</span><div class="check-label">防火墙放通 RDMA 端口（端口随机，建议通过 RDMA fabric 控制面配置）</div></li>
+      <li><span class="check-icon">📊</span><div class="check-label">查看日志中 <code>IO rpc server listened at:</code> 包含 <code>rdma://</code> 地址</div></li>
+      <li><span class="check-icon">📊</span><div class="check-label">查看日志中 <code>iorpc client started, server</code> 后出现 RDMA transport 字样</div></li>
+    </ul>
+  </div>
+
+  <!-- 8. 参数速查 -->
+  <div class="card">
+    <h2><span class="icon">📌</span>8. 参数速查表</h2>
+    <table>
+      <thead>
+        <tr><th>参数 / 变量</th><th>作用域</th><th>默认</th><th>推荐设置</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>--cache-group &lt;name&gt;</code></td>
+          <td>Server + Client</td>
+          <td>不加入组</td>
+          <td>所有需要共享缓存的节点设同一名</td>
+        </tr>
+        <tr>
+          <td><code>--rdma-network eth0</code></td>
+          <td>Server RDMA 地址</td>
+          <td>使用 group IP</td>
+          <td>有 RDMA 专用网卡时明确指定</td>
+        </tr>
+        <tr>
+          <td><code>JFS_ENABLE_IORPC_CLI=1</code></td>
+          <td>Client</td>
+          <td>禁用（走旧协议）</td>
+          <td><strong>所有节点都要设置</strong></td>
+        </tr>
+        <tr>
+          <td><code>JFS_RDMA_DISABLED=1</code></td>
+          <td>全局 RDMA</td>
+          <td>RDMA 启用</td>
+          <td>无 RDMA 硬件时设为 1 明确禁用</td>
+        </tr>
+        <tr>
+          <td><code>JFS_DISABLE_IORPC_SVR=1</code></td>
+          <td>Server</td>
+          <td>Server 启用</td>
+          <td>调试时临时禁用</td>
+        </tr>
+        <tr>
+          <td><code>JFS_IORPC_MODE=splice</code></td>
+          <td>Server 数据路径</td>
+          <td>pagecache</td>
+          <td>无 RDMA 时可尝试（需 kernel pipe ≥ 8 MiB）</td>
+        </tr>
+        <tr>
+          <td><code>--cache-try-dio</code></td>
+          <td>Server 数据路径</td>
+          <td>关闭</td>
+          <td>Linux 下可尝试减少拷贝（与 RDMA 兼容）</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Footer -->
+  <div style="text-align:center; color:#94a3b8; font-size:0.82rem; margin-top:8px;">
+    基于 jfs 源码分析生成 · 2026-05-27 · 涉及文件：pkg/fs/peer.go · pkg/fs/peer_rpc.go · pkg/rdma/rdma.go · pkg/common/alloc_rdma.go · cmd/mount/mount.go
+  </div>
+</div>
+
+</body>
+</html>
