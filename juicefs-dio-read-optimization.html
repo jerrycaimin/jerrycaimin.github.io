@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>JuiceFS O_DIRECT 读优化实践</title>
+  <title>JuiceFS 量化场景大块随机读优化</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -218,7 +218,7 @@
 <div class="card">
   <h2>2. 调优前测试结果</h2>
 
-  <p>使用原始 <code>test1.py</code>（标准 buffered I/O），分别在 JuiceFS 和本地 NVMe 上测试：</p>
+  <p>使用原始 <code>test.py</code>（标准 buffered I/O），分别在 JuiceFS 和本地 NVMe 上测试：</p>
 
   <table class="results-table">
     <tr>
@@ -259,7 +259,7 @@
     <strong>差距：</strong>JuiceFS 比本地 NVMe 慢约 29%。Buffered I/O 模式下，FUSE 的 128KB 请求大小限制严重制约了 JuiceFS 的带宽利用。
   </div>
 
-  <h3>原始代码（test1.py）</h3>
+  <h3>原始代码（test.py）</h3>
   <pre><span class="comment"># 标准 buffered I/O：每次 read() 被内核拆成 128KB FUSE 请求</span>
 <span class="keyword">for</span> d <span class="keyword">in</span> dates:
     fds[(d, <span class="string">"x"</span>)] = <span class="func">open</span>(xfile, <span class="string">"rb"</span>)
@@ -323,7 +323,7 @@ y_buf = <span class="func">bytearray</span>(y_bytes)  <span class="comment"># ~6
 <div class="card">
   <h2>4. 调优后测试结果</h2>
 
-  <p>使用优化后的 <code>test2.py</code>，同样在 JuiceFS 和本地 NVMe 上测试：</p>
+  <p>使用优化后的 <code>test.py</code>，同样在 JuiceFS 和本地 NVMe 上测试：</p>
 
   <table class="results-table">
     <tr>
@@ -432,7 +432,7 @@ y_buf = <span class="func">bytearray</span>(y_bytes)  <span class="comment"># ~6
   <h3>要点总结</h3>
   <ul>
     <li><strong>JuiceFS + O_DIRECT</strong> 读吞吐提升 <strong>6.3 倍</strong>（1,279 → 8,083 MiB/s），达到缓存集群带宽上限</li>
-    <li>优化后 JuiceFS 吞吐是本地 NVMe 单盘的 <strong>4.3 倍</strong>，充分体现分布式缓存聚合带宽优势</li>
+    <li>优化后 JuiceFS 吞吐是本地 NVMe 单盘的 <strong>4.3 倍</strong>，充分体现分布式缓存聚合带宽优势，当然NVMe也可以用DIO模式不过需要内存对齐，这里就不做对应优化。</li>
     <li>代码改动极小（~15 行），对应用逻辑零侵入</li>
     <li>自动检测 O_DIRECT 支持，本地盘自动回退，<strong>一套代码兼容所有存储</strong></li>
   </ul>
@@ -447,7 +447,6 @@ y_buf = <span class="func">bytearray</span>(y_bytes)  <span class="comment"># ~6
 
 <div class="footer">
   <p>JuiceFS POC 性能调优报告 · 2026-06-06</p>
-  <p><a href="index.html">← 返回首页</a></p>
 </div>
 
 </body>
