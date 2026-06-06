@@ -328,6 +328,51 @@ y_buf = <span class="func">bytearray</span>(y_bytes)  <span class="comment"># ~6
 
   <p>使用优化后的 <code>test.py</code>，同样在 JuiceFS 和本地 NVMe 上测试：</p>
 
+  <h3>JuiceFS 缓存集群（O_DIRECT 生效）</h3>
+  <pre>root@cache1:~# echo 3 > /proc/sys/vm/drop_caches; python3 /root/data1/localdata1/scripts/test2.py --root /jfs/data1/
+09:36:33 [INFO] Starting smoke test: batch_size=8, iters=50, seed=20260602
+09:36:33 [INFO] Loading manifest from: /jfs/data1/manifest.json
+09:36:33 [INFO] Filtered dates: ['20180102', '20180103']
+09:36:33 [INFO] Config: n_entities=15926, n_features=1800, x_bytes=114667200, y_bytes=63704
+09:36:33 [INFO] Begin reading...
+09:36:34 [INFO] Progress: iter 10/50, total_bytes_so_far=9178472320
+09:36:35 [INFO] Progress: iter 20/50, total_bytes_so_far=18356944640
+09:36:37 [INFO] Progress: iter 30/50, total_bytes_so_far=27535416960
+09:36:38 [INFO] Progress: iter 40/50, total_bytes_so_far=36713889280
+09:36:38 [INFO] Progress: iter 50/50, total_bytes_so_far=45892361600
+09:36:38 [INFO] Done. elapsed=5.414s
+{
+  "batch_size": 8,
+  "iters": 50,
+  "total_bytes": 45892361600,
+  "elapsed_sec": 5.414348125457764,
+  <strong style="color:#a6e3a1">"throughput_MiB_s": 8083.404606246693,</strong>
+  "samples_per_sec": 73.87777636964957
+}</pre>
+
+  <h3>本地 NVMe（自动回退到 Buffered I/O）</h3>
+  <pre>root@cache1:~# echo 3 > /proc/sys/vm/drop_caches; python3 /root/data1/localdata1/scripts/test2.py --root /data1/data1
+09:41:33 [INFO] Starting smoke test: batch_size=8, iters=50, seed=20260602
+09:41:33 [INFO] Loading manifest from: /data1/data1/manifest.json
+09:41:33 [INFO] Filtered dates: ['20180102', '20180103']
+09:41:33 [INFO] Config: n_entities=15926, n_features=1800, x_bytes=114667200, y_bytes=63704
+09:41:33 [INFO] <span style="color:#fab387">O_DIRECT not supported, falling back to buffered I/O</span>
+09:41:33 [INFO] Begin reading... (O_DIRECT=False)
+09:41:38 [INFO] Progress: iter 10/50, total_bytes_so_far=9178472320
+09:41:43 [INFO] Progress: iter 20/50, total_bytes_so_far=18356944640
+09:41:48 [INFO] Progress: iter 30/50, total_bytes_so_far=27535416960
+09:41:52 [INFO] Progress: iter 40/50, total_bytes_so_far=36713889280
+09:41:56 [INFO] Progress: iter 50/50, total_bytes_so_far=45892361600
+09:41:56 [INFO] Done. elapsed=23.195s
+{
+  "batch_size": 8,
+  "iters": 50,
+  "total_bytes": 45892361600,
+  "elapsed_sec": 23.19451093673706,
+  "throughput_MiB_s": 1886.9277604740637,
+  "samples_per_sec": 17.245459543898058
+}</pre>
+
   <table class="results-table">
     <tr>
       <th>存储</th>
