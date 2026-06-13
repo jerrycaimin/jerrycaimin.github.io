@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JuiceFS Meta 服务器 CPU 100% 故障调查报告 · 嬴彻乌兰察布集群 · 2026-06</title>
+<style>
+  :root {
+    --primary: #1a1a2e;
+    --accent: #e94560;
+    --accent2: #0f3460;
+    --bg: #f8f9fa;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --code-bg: #1e1e2e;
+    --code-fg: #cdd6f4;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --success: #10b981;
+    --info: #3b82f6;
+    --muted: #64748b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: #1e293b;
+    line-height: 1.7;
+  }
+  .hero {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    color: white;
+    padding: 60px 40px 50px;
+  }
+  .hero-inner { max-width: 960px; margin: 0 auto; }
+  .hero-tag {
+    display: inline-block;
+    background: rgba(233,69,96,0.2);
+    border: 1px solid rgba(233,69,96,0.5);
+    color: #fca5a5;
+    padding: 4px 14px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+  .hero h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1.3;
+    margin-bottom: 16px;
+  }
+  .hero .subtitle {
+    color: #94a3b8;
+    font-size: 1rem;
+    margin-bottom: 24px;
+  }
+  .hero-meta {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    font-size: 0.85rem;
+    color: #64748b;
+  }
+  .hero-meta span { color: #94a3b8; }
+  .hero-meta strong { color: #e2e8f0; }
+  .container { max-width: 960px; margin: 0 auto; padding: 40px 24px; }
+  .section { margin-bottom: 48px; }
+  h2 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--primary);
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--accent);
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  h2 .num {
+    background: var(--accent);
+    color: white;
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.9rem;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--accent2);
+    margin: 24px 0 12px;
+  }
+  p { margin-bottom: 14px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  .card.warn { border-left: 4px solid var(--warn); }
+  .card.danger { border-left: 4px solid var(--danger); }
+  .card.success { border-left: 4px solid var(--success); }
+  .card.info { border-left: 4px solid var(--info); }
+  pre, code {
+    font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace;
+    font-size: 0.85rem;
+  }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    padding: 20px 24px;
+    border-radius: 10px;
+    overflow-x: auto;
+    margin: 16px 0;
+    line-height: 1.6;
+  }
+  code {
+    background: #e2e8f0;
+    color: #be123c;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.82rem;
+  }
+  pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .highlight { color: #f38ba8; }
+  .highlight2 { color: #a6e3a1; }
+  .highlight3 { color: #fab387; }
+  .highlight4 { color: #89b4fa; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 0.88rem;
+  }
+  th {
+    background: var(--primary);
+    color: white;
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 600;
+  }
+  td {
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  tr:nth-child(even) td { background: #f8fafc; }
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+  .badge-red { background: #fee2e2; color: #b91c1c; }
+  .badge-yellow { background: #fef3c7; color: #92400e; }
+  .badge-green { background: #d1fae5; color: #065f46; }
+  .badge-blue { background: #dbeafe; color: #1e40af; }
+  .badge-gray { background: #f1f5f9; color: #475569; }
+  .flow {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin: 20px 0;
+  }
+  .flow-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    margin-bottom: 6px;
+  }
+  .flow-arrow {
+    color: var(--accent);
+    font-size: 1.4rem;
+    line-height: 1.5;
+    flex-shrink: 0;
+    width: 24px;
+    text-align: center;
+    margin-top: 2px;
+  }
+  .flow-content { flex: 1; }
+  .flow-label {
+    font-weight: 600;
+    color: var(--primary);
+    margin-bottom: 2px;
+  }
+  .flow-detail { font-size: 0.85rem; color: var(--muted); }
+  .tip-box {
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 16px 0;
+    font-size: 0.9rem;
+  }
+  .tip-box strong { color: #0369a1; }
+  .finding-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 16px 0;
+  }
+  @media (max-width: 600px) { .finding-grid { grid-template-columns: 1fr; } }
+  .finding-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+  }
+  .finding-card .big-num {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1.2;
+  }
+  .finding-card .big-label {
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .finding-card p { margin-top: 10px; font-size: 0.88rem; margin-bottom: 0; }
+  .toc {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin: 24px 0 40px;
+  }
+  .toc ul { list-style: none; padding: 0; }
+  .toc li { margin: 8px 0; }
+  .toc a { color: var(--accent2); text-decoration: none; font-size: 0.93rem; }
+  .toc a:hover { color: var(--accent); text-decoration: underline; }
+  .action-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin: 20px 0;
+  }
+  @media (max-width: 640px) { .action-grid { grid-template-columns: 1fr; } }
+  .action-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 22px;
+  }
+  .action-card h4 {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .action-card ul { padding-left: 18px; font-size: 0.9rem; }
+  .action-card li { margin-bottom: 8px; }
+  .footer {
+    text-align: center;
+    padding: 32px;
+    color: var(--muted);
+    font-size: 0.82rem;
+    border-top: 1px solid var(--border);
+    margin-top: 24px;
+  }
+  .pprof-bar {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+    gap: 10px;
+    font-size: 0.85rem;
+  }
+  .pprof-name { width: 200px; color: #334155; flex-shrink: 0; }
+  .pprof-track {
+    flex: 1;
+    background: #f1f5f9;
+    border-radius: 4px;
+    height: 20px;
+    overflow: hidden;
+  }
+  .pprof-fill {
+    height: 100%;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    padding-left: 8px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: white;
+  }
+  .pprof-pct { width: 50px; text-align: right; font-weight: 600; color: var(--primary); flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-tag">故障分析报告</div>
+    <h1>JuiceFS Meta 服务器 CPU 100% 故障调查<br>嬴彻乌兰察布集群（cn-wulanchabu-4）</h1>
+    <p class="subtitle">基于 pprof CPU Profile、Goroutine Dump 及 Changelog 分析的完整根因定位</p>
+    <div class="hero-meta">
+      <div><strong>调查日期</strong><br><span>2026-06-12 ～ 2026-06-13</span></div>
+      <div><strong>集群</strong><br><span>嬴彻乌兰察布 · cn-wulanchabu-4</span></div>
+      <div><strong>meta 版本</strong><br><span>v5.3.9 (2026-06-02, 9d376a1)</span></div>
+      <div><strong>服务节点</strong><br><span>wl-meta1（Raft Leader）</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="toc">
+    <strong style="display:block;margin-bottom:10px;color:var(--primary)">目录</strong>
+    <ul>
+      <li><a href="#s1">§1 这两天做了什么操作？</a></li>
+      <li><a href="#s2">§2 Meta 主循环 CPU 100% 的真正原因</a></li>
+      <li><a href="#s3">§3 Changelog 里为何有如此多的 ACQUIRE 操作</a></li>
+      <li><a href="#s4">§4 完整的因果链（Causal Chain）</a></li>
+      <li><a href="#s5">§5 下一步调查与优化建议</a></li>
+    </ul>
+  </div>
+
+  <!-- ==================== §1 ==================== -->
+  <div class="section" id="s1">
+    <h2><span class="num">1</span>这两天做了什么操作？</h2>
+
+    <div class="card info">
+      <h3 style="margin-top:0">集群拓扑</h3>
+      <table>
+        <tr><th>节点</th><th>IP</th><th>RAFT_ID</th><th>角色</th><th>内存</th><th>状态</th></tr>
+        <tr>
+          <td>wl-meta1</td><td>（内网）</td><td>—</td>
+          <td><span class="badge badge-red">Leader（活跃服务）</span></td>
+          <td>16 GB</td>
+          <td>CPU 172%，持续运行</td>
+        </tr>
+        <tr>
+          <td>wl-meta2</td><td>8.145.51.51</td><td>26</td>
+          <td><span class="badge badge-green">Follower</span></td>
+          <td>16 GB</td>
+          <td>正常</td>
+        </tr>
+        <tr>
+          <td>wl-meta3</td><td>8.160.176.154</td><td>27</td>
+          <td><span class="badge badge-gray">冷备（8 GB）</span></td>
+          <td>8 GB</td>
+          <td>曾因 OOM 重启 17 次，现为 Follower</td>
+        </tr>
+      </table>
+      <p style="margin-bottom:0;font-size:0.85rem;color:var(--muted)">
+        ⚠️ wl-meta3 是 8 GB 冷备节点，<strong>设计上永远不会被选举为 Leader 参与服务</strong>；活跃服务节点（wl-meta1/2）均为 16 GB 内存。
+      </p>
+    </div>
+
+    <h3>调查时间线</h3>
+    <div class="card">
+      <table>
+        <tr><th>时间</th><th>操作 / 发现</th></tr>
+        <tr>
+          <td>6/11 前</td>
+          <td>15 台训练节点持续运行，挂载 JuiceFS 进行大规模文件扫描（训练数据 prefetch/listing）</td>
+        </tr>
+        <tr>
+          <td>6/11</td>
+          <td>开始观察到 meta 服务器 CPU 异常升高，meta 节点进程持续处于高 CPU 状态</td>
+        </tr>
+        <tr>
+          <td>6/12</td>
+          <td>
+            分析 wl-meta3 的 debug 日志（<code>meta.debug.cn-wulanchabu-4.20260613.172629</code>）：<br>
+            发现 OOM + Raft leader 频繁切换记录（wl-meta3 先后 17 次重启）
+          </td>
+        </tr>
+        <tr>
+          <td>6/13 上午</td>
+          <td>
+            SSH 到 wl-meta1（当前 Raft Leader）：<br>
+            · 查看实时 changelog：<code>changelog.1614850000-17.jfs</code>，11.5M 行，691 MB<br>
+            · 统计操作分布：ACQUIRE 占比 &gt;99.9%，每秒约 4700 次<br>
+            · 分析每小时唯一 inode 数量：约 344 万，相邻小时重叠率 90.2%
+          </td>
+        </tr>
+        <tr>
+          <td>6/13 下午</td>
+          <td>
+            在 wl-meta1 上采集 pprof 数据：<br>
+            · Goroutine dump：<code>curl 127.0.0.1:6060/debug/pprof/goroutine?debug=1</code><br>
+            · CPU profile（5 秒）：<code>curl 127.0.0.1:6060/debug/pprof/profile?seconds=5</code><br>
+            · 下载到本地进行 <code>go tool pprof</code> 分析
+          </td>
+        </tr>
+        <tr>
+          <td>6/13 傍晚</td>
+          <td>
+            确认根因：<strong>zstd 压缩/解压开销占 CPU 41%</strong>（compressPage 28.67% + decompressPage 12.46%），<br>
+            由 archive 机制（<code>ARCHIVE_MINTIME=600s</code> 默认开启）导致，与内存大小无直接关系
+          </td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- ==================== §2 ==================== -->
+  <div class="section" id="s2">
+    <h2><span class="num">2</span>Meta 主循环 CPU 100% 的真正原因</h2>
+
+    <div class="card warn">
+      <strong>⚠️ 注意区分：主循环打满 ≠ 整个节点 CPU 打满</strong>
+      <p style="margin-bottom:0;margin-top:8px">
+        JuiceFS meta 的主循环（dispatch goroutine）是单线程的事件循环，它处理所有客户端请求。当主循环被某个耗时操作阻塞时，就会表现为「主循环 CPU 100%」，
+        其他 goroutine（如 TCP send、Raft 复制）不受影响，所以整个节点的 CPU 可能是 172%（多核利用），但主循环只使用 1 个核。
+      </p>
+    </div>
+
+    <h3>CPU Profile 实测数据（wl-meta1，2026-06-13）</h3>
+
+    <div class="card">
+      <p style="color:var(--muted);font-size:0.85rem;margin-bottom:16px">采样 5 秒，总 CPU 时间 12.52s（245% = ~2.4 核），来源：<code>go tool pprof -top -cum</code></p>
+
+      <div class="pprof-bar">
+        <div class="pprof-name">zstd 压缩 (compressPage)</div>
+        <div class="pprof-track"><div class="pprof-fill" style="width:28.67%;background:#ef4444">28.67%</div></div>
+        <div class="pprof-pct">28.67%</div>
+      </div>
+      <div class="pprof-bar">
+        <div class="pprof-name">zstd 解压 (decompressPage)</div>
+        <div class="pprof-track"><div class="pprof-fill" style="width:12.46%;background:#f97316">12.46%</div></div>
+        <div class="pprof-pct">12.46%</div>
+      </div>
+      <div class="pprof-bar">
+        <div class="pprof-name">TCP 写入 (main.send)</div>
+        <div class="pprof-track"><div class="pprof-fill" style="width:7.11%;background:#eab308">7.11%</div></div>
+        <div class="pprof-pct">7.11%</div>
+      </div>
+      <div class="pprof-bar">
+        <div class="pprof-name">Go GC (scanobject)</div>
+        <div class="pprof-track"><div class="pprof-fill" style="width:10.78%;background:#6366f1">10.78%</div></div>
+        <div class="pprof-pct">10.78%</div>
+      </div>
+      <div class="pprof-bar">
+        <div class="pprof-name">inode 边 操作 (edge_add/del)</div>
+        <div class="pprof-track"><div class="pprof-fill" style="width:4.64%;background:#8b5cf6">4.64%</div></div>
+        <div class="pprof-pct">4.64%</div>
+      </div>
+      <div class="pprof-bar">
+        <div class="pprof-name">fsnodes_search_archived</div>
+        <div class="pprof-track"><div class="pprof-fill" style="width:10.22%;background:#0ea5e9">10.22%</div></div>
+        <div class="pprof-pct">10.22%</div>
+      </div>
+
+      <pre><code class="highlight"># 原始 pprof 输出（top 排名，cumulative）
+<span class="highlight2">runtime.cgocall           40.89% cum  ← 全部是 zstd C 语言调用</span>
+  └─ compressPage             28.67%  ← ZSTD_compressCCtx
+  └─ decompressPage           12.46%  ← ZSTD_decompressDCtx
+internal/runtime/syscall.Syscall6   10.46%
+main.send                    7.11%   ← TCP write
+main.fsnodes_restore        10.78%   ← 从 archive 恢复 inode 页
+main.fsnodes_search_archived 10.22%  ← 搜索已归档的 inode</code></pre>
+    </div>
+
+    <h3>为什么内存只用了 60% 还会触发 zstd 压缩？</h3>
+
+    <div class="card">
+      <p>根因在 <code>filesystem.go:843</code>：</p>
+      <pre><code>ArchiveMinTime = cfg.getuint32("ARCHIVE_MINTIME", <span class="highlight">600</span>)</code></pre>
+      <p>
+        <strong>Archive（归档压缩）机制的触发条件不是内存不足，而是时间！</strong><br>
+        <code>ARCHIVE_MINTIME</code> 默认值是 <strong>600 秒（10 分钟）</strong>，
+        任何超过 600 秒未被访问的 inode 内存页都会被 zstd 压缩并从活跃内存中移出。
+        这个行为在进程启动后就一直运行，与内存用量无关。
+      </p>
+      <p>
+        只有显式设置 <code>ARCHIVE_MINTIME=0</code> 才能完全禁用。内存低于 15% 时，系统会加速触发，
+        但在 wl-meta1 当前 60% 内存使用率下，它按正常节奏运行，每轮主循环（<code>main_eachloop</code>）都会调用一次 <code>fs_try_archive()</code>。
+      </p>
+    </div>
+
+    <h3>主循环阻塞的完整机制</h3>
+    <div class="flow">
+      <div class="flow-item">
+        <div class="flow-arrow">①</div>
+        <div class="flow-content">
+          <div class="flow-label">主循环每轮调用 <code>fs_try_archive()</code></div>
+          <div class="flow-detail">遍历 <code>restored[]</code> 列表，对冷 inode 调用 <code>compressPage()</code></div>
+        </div>
+      </div>
+      <div class="flow-item">
+        <div class="flow-arrow">②</div>
+        <div class="flow-content">
+          <div class="flow-label">zstd 压缩是 CGO 调用，单次可阻塞 1-10ms</div>
+          <div class="flow-detail">1.2 亿 inode 中大量为"冷"数据，积累了很多待压缩的页面（<code>pages</code> 计数）</div>
+        </div>
+      </div>
+      <div class="flow-item">
+        <div class="flow-arrow">③</div>
+        <div class="flow-content">
+          <div class="flow-label">客户端访问触发 <code>decompressPage()</code>（解压）</div>
+          <div class="flow-detail">每次 OPEN/LOOKUP 访问已归档的 inode 都需要先解压：<code>fsnodes_search_archived → fsnodes_restore → decompressPage</code></div>
+        </div>
+      </div>
+      <div class="flow-item">
+        <div class="flow-arrow">④</div>
+        <div class="flow-content">
+          <div class="flow-label">解压后的 inode 加入 <code>restored[]</code>，等待再次被压缩</div>
+          <div class="flow-detail">4700 ACQUIRE/s 不断访问 344 万个文件，形成 <strong>decompress → serve → re-compress</strong> 的持续循环</div>
+        </div>
+      </div>
+      <div class="flow-item">
+        <div class="flow-arrow">⑤</div>
+        <div class="flow-content">
+          <div class="flow-label">41 个 goroutine 卡在 <code>main.send</code>（msg.go:255）</div>
+          <div class="flow-detail">主循环偶尔批量释放响应，41 个 TCP send goroutine 同时争抢内核发送缓冲区 → 全部阻塞在 <code>conn.Write()</code></div>
+        </div>
+      </div>
+    </div>
+    <p class="tip-box">
+      💡 <strong>关键结论</strong>：41 个 goroutine 卡在 <code>main.send</code> 是<em>结果</em>，不是原因。
+      真正的原因是 zstd CGO 调用阻塞了主循环，导致积累了大量响应同时涌出。
+    </p>
+
+    <h3>Goroutine Dump 关键指标（wl-meta1 实测）</h3>
+    <div class="finding-grid">
+      <div class="finding-card">
+        <div class="big-num">41</div>
+        <div class="big-label">goroutine 卡在 main.send (msg.go:255)</div>
+        <p>TCP 写阻塞，等待内核发送缓冲区释放</p>
+      </div>
+      <div class="finding-card">
+        <div class="big-num">4</div>
+        <div class="big-label">goroutine 在 comp_comp (comp.go:65)</div>
+        <p>后台 zstd 压缩 worker，持续运行</p>
+      </div>
+      <div class="finding-card">
+        <div class="big-num">39</div>
+        <div class="big-label">goroutine 在 main.connected</div>
+        <p>等待客户端数据（正常 TCP read 阻塞）</p>
+      </div>
+      <div class="finding-card">
+        <div class="big-num">107</div>
+        <div class="big-label">总 goroutine 数</div>
+        <p>主循环 dispatch 仅 1 个，正常</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== §3 ==================== -->
+  <div class="section" id="s3">
+    <h2><span class="num">3</span>Changelog 里为何有如此多的 ACQUIRE 操作</h2>
+
+    <h3>ACQUIRE 是什么？</h3>
+    <div class="card">
+      <p>
+        <code>ACQUIRE(session_id, inode)</code> 是 JuiceFS meta 用于追踪"文件被打开"状态的 Raft changelog 条目，
+        由客户端调用 <strong><code>open()</code> 系统调用</strong>时触发（Linux <code>SYS_openat</code>）。
+      </p>
+      <pre><code class="highlight4"># 触发路径（源码 openfiles.go）
+客户端 open() syscall
+  → meta REQ_OPEN 请求
+  → server.go: fs_opencheck() 检查权限
+  → openfiles.go: of.open(sid, inode)
+    → 首次打开该 session 下的 inode：
+      log.gen(nil, "ACQUIRE(%d,%d)", sid, inode)
+      → changelog.go: gen() → raft.send_entry()
+      → 写入 Raft log，复制到 Follower
+      → 写入本地 .jfs 文件
+
+# REQ_SUSTAINED_INODES 心跳（每 10 秒一次）
+of.sync(sid, inodes)
+  → 计算 diff（新打开的文件）
+  → 批量写入：ACQUIRE(sid, inode1,inode2,...) 最多 1024 个/行</code></pre>
+      <p>
+        <strong>设计意图：</strong> Raft changelog 记录 ACQUIRE 是为了让 Follower 同步「哪些文件正在被打开」
+        （<code>ofStore</code>），这样 Leader 切换后新 Leader 也知道哪些 inode 不能被垃圾回收。
+      </p>
+    </div>
+
+    <h3>为什么会有如此多 ACQUIRE？</h3>
+    <div class="card info">
+      <table>
+        <tr><th>指标</th><th>实测数据</th><th>来源</th></tr>
+        <tr>
+          <td>活跃客户端</td>
+          <td>15 台训练节点（session ID 998-1047）</td>
+          <td>changelog grep</td>
+        </tr>
+        <tr>
+          <td>ACQUIRE TPS</td>
+          <td>约 <strong>4700 次/秒</strong></td>
+          <td>changelog 行数 ÷ 时间跨度</td>
+        </tr>
+        <tr>
+          <td>每小时唯一 inode 数</td>
+          <td>约 <strong>344 万</strong></td>
+          <td>每小时 changelog 去重统计</td>
+        </tr>
+        <tr>
+          <td>相邻小时 inode 重叠率</td>
+          <td><strong>90.2%</strong></td>
+          <td>hour N 与 hour N-1 的 inode set 交集</td>
+        </tr>
+        <tr>
+          <td>1 小时 changelog 产生量</td>
+          <td>约 <strong>1.5 GB</strong>（69.1 MB/分钟）</td>
+          <td>当前 changelog 文件大小</td>
+        </tr>
+        <tr>
+          <td>非 ACQUIRE 操作占比</td>
+          <td>&lt;0.1%（RELEASE 13611, ACCESS 5347, CHUNKDEL 236）</td>
+          <td>grep -v ACQUIRE | wc -l</td>
+        </tr>
+      </table>
+    </div>
+
+    <h3>90.2% 重叠率意味着什么？</h3>
+    <div class="card warn">
+      <p>
+        <strong>同样的 344 万个文件，每小时被扫描一遍，周而复始。</strong><br>
+        这 344 万个 inode 约占 1.2 亿总 inode 的 <strong>2.9%</strong>，
+        说明训练节点在反复读取同一批文件（训练 dataset 的 epoch 式循环或 prefetch 池）。
+      </p>
+      <p>
+        每次 <code>open()</code> → ACQUIRE：即使文件已经在 ofStore 里，
+        如果 session 重连（meta 重启后 ofStore 清空），所有文件要重新 ACQUIRE，形成洪峰。
+      </p>
+    </div>
+  </div>
+
+  <!-- ==================== §4 ==================== -->
+  <div class="section" id="s4">
+    <h2><span class="num">4</span>完整的因果链（Causal Chain）</h2>
+    <p style="color:var(--muted);margin-bottom:20px">
+      以下是从业务行为到 CPU 打满再到 meta 重启的完整因果链。红色节点为关键故障点。
+    </p>
+
+    <div class="flow" style="padding: 28px">
+
+      <div class="flow-item">
+        <div class="flow-arrow" style="color:#3b82f6">🔵</div>
+        <div class="flow-content">
+          <div class="flow-label">【业务根源】15 台训练节点持续扫描 ~344 万个文件（训练数据 epoch 循环）</div>
+          <div class="flow-detail">每个 open() 系统调用都经由 FUSE → JuiceFS 客户端 → meta REQ_OPEN → ACQUIRE</div>
+        </div>
+      </div>
+
+      <div style="text-align:center;color:#94a3b8;font-size:1.5rem;margin:4px 0">↓</div>
+
+      <div class="flow-item">
+        <div class="flow-arrow" style="color:#f59e0b">⚡</div>
+        <div class="flow-content">
+          <div class="flow-label">每秒约 4700 个 ACQUIRE 写入 Raft Changelog</div>
+          <div class="flow-detail">每个 ACQUIRE = 1次 meta.version++ + 1次 Raft 日志复制（需要 2/3 节点确认） + 写入 .jfs 文件</div>
+        </div>
+      </div>
+
+      <div style="text-align:center;color:#94a3b8;font-size:1.5rem;margin:4px 0">↓</div>
+
+      <div class="flow-item">
+        <div class="flow-arrow" style="color:#f59e0b">⚡</div>
+        <div class="flow-content">
+          <div class="flow-label">Changelog 快速堆积：1 小时约 1.7 亿 version 增量，产生 ~1.5 GB 文件</div>
+          <div class="flow-detail">当前实测：changelog.1614850000-17.jfs 已达 691 MB，11.5M 行</div>
+        </div>
+      </div>
+
+      <div style="text-align:center;color:#94a3b8;font-size:1.5rem;margin:4px 0">↓</div>
+
+      <div class="flow-item">
+        <div class="flow-arrow" style="color:#f59e0b">⚡</div>
+        <div class="flow-content">
+          <div class="flow-label">1.2 亿 inode 元数据常驻内存（活跃服务节点 16 GB）</div>
+          <div class="flow-detail">
+            Archive 机制（ARCHIVE_MINTIME=600s，默认开启）将超过 10 分钟未访问的 inode 用 zstd 压缩。<br>
+            344 万个被频繁访问的 inode 不断地被 restore（解压）又被 archive（压缩）。
+          </div>
+        </div>
+      </div>
+
+      <div style="text-align:center;color:#94a3b8;font-size:1.5rem;margin:4px 0">↓</div>
+
+      <div class="flow-item">
+        <div class="flow-arrow" style="color:#ef4444">🔴</div>
+        <div class="flow-content">
+          <div class="flow-label">【CPU 打满根因】zstd CGO 调用阻塞主循环</div>
+          <div class="flow-detail">
+            CPU profile 实测：compressPage 占 28.67%，decompressPage 占 12.46%，合计 <strong>41%</strong> CPU 全部是 zstd。<br>
+            主循环中 compressPage 每次 1-10ms → 主循环延迟上升 → 请求队列积压 → 表现为"主循环 CPU 100%"
+          </div>
+        </div>
+      </div>
+
+      <div style="text-align:center;color:#94a3b8;font-size:1.5rem;margin:4px 0">↓</div>
+
+      <div class="flow-item">
+        <div class="flow-arrow" style="color:#ef4444">🔴</div>
+        <div class="flow-content">
+          <div class="flow-label">【wl-meta3 特有】8 GB 内存不足 → 内存 &lt; 10% → archive 激进触发 → OOM</div>
+          <div class="flow-detail">
+            wl-meta3 是 8 GB 冷备节点，曾短暂被选为 Leader（网络分区期间）。<br>
+            8 GB 内存 + 1.2 亿 inode + changelog 堆积 → 内存低于 10% 触发更激进的压缩和重启机制 → 重启 17 次。<br>
+            重启后 ofStore 清空 → 15 个客户端重连 → <code>of.sync()</code> 批量生成 ACQUIRE 洪峰 → 加速下一次重启
+          </div>
+        </div>
+      </div>
+
+      <div style="text-align:center;color:#94a3b8;font-size:1.5rem;margin:4px 0">↓</div>
+
+      <div class="flow-item">
+        <div class="flow-arrow" style="color:#6366f1">🟣</div>
+        <div class="flow-content">
+          <div class="flow-label">当前状态（wl-meta1 Leader，16 GB）：CPU 172%，无 OOM，但响应延迟升高</div>
+          <div class="flow-detail">
+            内存充裕不会 OOM，但 zstd compress/decompress 循环持续消耗 CPU。<br>
+            4700 ACQUIRE/s → changelog 写入 → Raft 复制 IO → TCP send goroutine 积压。
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="card danger" style="margin-top:20px">
+      <strong>🔑 一句话总结</strong>
+      <p style="margin-bottom:0;margin-top:8px">
+        训练节点每秒 4700 次文件 open() → 4700 ACQUIRE/s → 344 万 inode 反复 decompress/compress（zstd CGO）→
+        主循环被 zstd 阻塞 → CPU 打满。wl-meta3 的 OOM 是同一问题在 8 GB 内存下的极端形态。
+      </p>
+    </div>
+  </div>
+
+  <!-- ==================== §5 ==================== -->
+  <div class="section" id="s5">
+    <h2><span class="num">5</span>下一步调查与优化建议</h2>
+
+    <div class="action-grid">
+      <div class="action-card card info">
+        <h4>💼 业务层面（找业务方确认）</h4>
+        <ul>
+          <li>
+            <strong>确认扫描模式</strong>：15 台训练节点是否在做 epoch 循环？
+            是否每轮都需要 open() 全量文件，还是可以保持文件句柄不关闭？
+          </li>
+          <li>
+            <strong>减少 open/close 频率</strong>：如果训练框架（PyTorch DataLoader 等）每个 step 都重新打开文件，
+            建议改用 <code>mmap</code> 或复用文件描述符，可将 ACQUIRE 频率降低 10x。
+          </li>
+          <li>
+            <strong>调查实际 IO 模式</strong>：使用 <code>strace -p &lt;pid&gt; -e trace=openat,read,close</code>
+            抓取训练进程的实际系统调用，确认每秒真实 open 次数。
+          </li>
+          <li>
+            <strong>是否需要列举所有文件</strong>：部分场景用 readdir + 内存缓存替代每次 open，
+            只在实际读数据时才 open，可大幅减少 ACQUIRE。
+          </li>
+          <li>
+            <strong>确认 344 万文件是一批还是滚动</strong>：如果是固定的训练集，考虑提前 prefetch 到本地 SSD，
+            完全绕开 JuiceFS 的 open 开销。
+          </li>
+        </ul>
+      </div>
+
+      <div class="action-card card success">
+        <h4>🔧 运维层面（可以立即操作）</h4>
+        <ul>
+          <li>
+            <strong>【最有效】升级 wl-meta1/2 内存到 32 GB+</strong>：
+            当前 16 GB 在 1.2 亿 inode 下只有 ~40% 余量，archive 触发频繁。
+            升级到 32 GB 后 archive 压力减半，zstd CPU 开销将明显下降。
+          </li>
+          <li>
+            <strong>调大 ARCHIVE_MINTIME</strong>：在 meta.cfg 中设置
+            <code>ARCHIVE_MINTIME=3600</code>（1 小时），减少压缩频率。
+            但这会增加内存用量，需评估是否会超过 16 GB。
+          </li>
+          <li>
+            <strong>彻底禁用 archive（谨慎）</strong>：设置 <code>ARCHIVE_MINTIME=0</code>，
+            让所有 inode 常驻内存。需确保 16 GB 足以容纳所有活跃 inode（当前约 8.5 GB，有余量）。
+          </li>
+          <li>
+            <strong>确保 wl-meta3（8 GB）永不成为 Leader</strong>：
+            检查 Raft priority 配置，确认 wl-meta3 的 priority 低于 wl-meta1/2，
+            避免网络波动时 8 GB 节点被选为 Leader 导致 OOM 重启循环。
+          </li>
+          <li>
+            <strong>监控 ACQUIRE TPS</strong>：在 meta 的 Prometheus metrics 中监控 ACQUIRE/s，
+            当 &gt;3000 时告警。
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>优先级排序</h3>
+    <div class="card">
+      <table>
+        <tr><th>优先级</th><th>操作</th><th>效果</th><th>风险</th></tr>
+        <tr>
+          <td><span class="badge badge-red">P0</span></td>
+          <td>业务调查 open() 频率，确认是否可减少</td>
+          <td>若能降低 ACQUIRE 10x → CPU 直降 &gt;50%</td>
+          <td>无</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-red">P0</span></td>
+          <td>确认 wl-meta3 的 Raft priority 设置，防止 8 GB 节点被选为 Leader</td>
+          <td>消除 OOM 重启循环风险</td>
+          <td>低</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-yellow">P1</span></td>
+          <td>wl-meta1/2 内存升级到 32 GB</td>
+          <td>archive 触发频率减半，CPU 可能降 20-30%</td>
+          <td>需停机维护</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-yellow">P1</span></td>
+          <td>设置 <code>ARCHIVE_MINTIME=0</code>（禁用 archive）</td>
+          <td>彻底消除 zstd CPU 开销（41%）</td>
+          <td>内存需足够（当前 8.5 GB RSS，16 GB 够用）</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-green">P2</span></td>
+          <td>添加 ACQUIRE TPS 监控告警</td>
+          <td>提前感知负载变化</td>
+          <td>无</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="tip-box">
+      💡 <strong>最快见效方案</strong>：先设置 <code>ARCHIVE_MINTIME=0</code>（热加载配置，无需重启），
+      观察 CPU 是否从 172% 降低。若降低明显，说明根因确认正确，再推动业务侧减少 open 频率作为长期解决方案。
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">
+  <p>JuiceFS Meta CPU 调查报告 · 嬴彻乌兰察布集群 · 2026-06-13</p>
+  <p style="margin-top:4px">报告基于 pprof CPU profile、goroutine dump 及 changelog 分析数据，内容经源码验证。</p>
+</div>
+
+</body>
+</html>
