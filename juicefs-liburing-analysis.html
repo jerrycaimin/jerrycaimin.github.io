@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>io_uring 在云存储场景的行为分析与优化</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+      background: #f0f2f5;
+      color: #1a1a2e;
+      line-height: 1.7;
+    }
+    .hero {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      color: white;
+      padding: 56px 40px 40px;
+      text-align: center;
+    }
+    .hero h1 { font-size: 2.1rem; font-weight: 700; letter-spacing: -0.5px; }
+    .hero .subtitle { margin-top: 10px; color: #a0c4ff; font-size: 1rem; }
+    .hero .badge {
+      display: inline-block;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.25);
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 0.78rem;
+      margin-top: 14px;
+    }
+    .container { max-width: 960px; margin: 0 auto; padding: 32px 20px; }
+    .card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+      padding: 32px;
+      margin-bottom: 28px;
+    }
+    .card h2 {
+      font-size: 1.35rem;
+      color: #0f3460;
+      margin-bottom: 16px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #e8ecf1;
+    }
+    .card h3 { font-size: 1.05rem; color: #16213e; margin: 22px 0 10px; font-weight: 600; }
+    p { font-size: 0.95rem; margin-bottom: 10px; }
+    ul, ol { padding-left: 22px; margin-bottom: 10px; }
+    li { font-size: 0.95rem; margin-bottom: 6px; }
+    code {
+      font-family: "SF Mono", "Fira Code", "Cascadia Code", Menlo, monospace;
+      background: #f4f6f9;
+      border: 1px solid #e0e4ea;
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-size: 0.88em;
+      color: #c7254e;
+    }
+    pre {
+      background: #1e1e2e;
+      color: #cdd6f4;
+      border-radius: 8px;
+      padding: 18px 20px;
+      overflow-x: auto;
+      font-family: "SF Mono", "Fira Code", Menlo, monospace;
+      font-size: 0.82rem;
+      line-height: 1.65;
+      margin: 14px 0;
+    }
+    pre .comment { color: #6c7086; font-style: italic; }
+    pre .keyword { color: #cba6f7; }
+    pre .string { color: #a6e3a1; }
+    pre .func { color: #89b4fa; }
+    pre .type { color: #f38ba8; }
+    pre .number { color: #fab387; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 0.9rem;
+    }
+    th {
+      background: #0f3460;
+      color: white;
+      padding: 11px 14px;
+      text-align: left;
+      font-weight: 600;
+    }
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid #e8ecf1;
+      vertical-align: top;
+    }
+    tr:nth-child(even) td { background: #f8f9fb; }
+    .tag-bad  { color: #e74c3c; font-weight: 700; }
+    .tag-good { color: #27ae60; font-weight: 700; }
+    .tag-warn { color: #e67e22; font-weight: 700; }
+
+    .note {
+      background: #fff8e1;
+      border-left: 4px solid #f9a825;
+      padding: 12px 16px;
+      border-radius: 0 8px 8px 0;
+      margin: 14px 0;
+      font-size: 0.9rem;
+    }
+    .info {
+      background: #e3f2fd;
+      border-left: 4px solid #1976d2;
+      padding: 12px 16px;
+      border-radius: 0 8px 8px 0;
+      margin: 14px 0;
+      font-size: 0.9rem;
+    }
+    .key-point {
+      background: linear-gradient(135deg, #f0fff4, #e8f5e9);
+      border: 1px solid #a5d6a7;
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin: 16px 0;
+      font-size: 0.95rem;
+    }
+    .key-point strong { color: #2e7d32; }
+
+    /* Phase diagram */
+    .phase-row {
+      display: flex;
+      gap: 0;
+      margin: 20px 0;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .phase-box {
+      flex: 1;
+      padding: 20px 16px;
+      text-align: center;
+    }
+    .phase-box .ph-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.8px; opacity: 0.75; }
+    .phase-box .ph-title { font-size: 1.1rem; font-weight: 700; margin: 6px 0 4px; }
+    .phase-box .ph-desc { font-size: 0.82rem; opacity: 0.85; }
+    .phase-box.submit { background: #1976d2; color: white; }
+    .phase-box.reap   { background: #388e3c; color: white; }
+    .phase-arrow {
+      display: flex;
+      align-items: center;
+      padding: 0 6px;
+      background: #e8ecf1;
+      color: #666;
+      font-size: 1.4rem;
+    }
+
+    /* Comparison grid */
+    .compare-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin: 20px 0;
+    }
+    .compare-box {
+      border-radius: 10px;
+      padding: 20px;
+      border: 1px solid #e0e4ea;
+    }
+    .compare-box.local { background: linear-gradient(135deg, #f0f4ff, #e8eeff); border-color: #9fa8da; }
+    .compare-box.cloud { background: linear-gradient(135deg, #fff3e0, #ffe8cc); border-color: #ffcc80; }
+    .compare-box .env-label { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 12px; }
+    .compare-box.local .env-label { color: #3949ab; }
+    .compare-box.cloud .env-label { color: #e65100; }
+    .compare-box .metric { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.06); }
+    .compare-box .metric:last-child { border-bottom: none; }
+    .compare-box .metric-name { font-size: 0.88rem; color: #555; }
+    .compare-box .metric-val { font-size: 1rem; font-weight: 700; }
+    .fast { color: #27ae60; }
+    .slow { color: #e74c3c; }
+
+    /* Optimization cards */
+    .opt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+    .opt-card {
+      border-radius: 10px;
+      padding: 18px;
+      border: 1px solid #e0e4ea;
+      background: white;
+    }
+    .opt-card .opt-num {
+      display: inline-block;
+      width: 26px; height: 26px;
+      background: #0f3460;
+      color: white;
+      border-radius: 50%;
+      text-align: center;
+      line-height: 26px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    .opt-card .opt-title { font-weight: 700; font-size: 0.95rem; margin-bottom: 6px; color: #1a1a2e; }
+    .opt-card .opt-desc { font-size: 0.85rem; color: #555; margin-bottom: 10px; }
+    .opt-card .eff {
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 2px 10px;
+      border-radius: 12px;
+      display: inline-block;
+    }
+    .eff.high   { background: #e8f5e9; color: #2e7d32; }
+    .eff.medium { background: #fff3e0; color: #e65100; }
+    .eff.low    { background: #ffebee; color: #c62828; }
+
+    @media (max-width: 640px) {
+      .compare-grid, .opt-grid { grid-template-columns: 1fr; }
+      .hero h1 { font-size: 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>io_uring 在云存储场景的行为分析与优化</h1>
+  <div class="subtitle">liburing / libaio 原理 · inline execution 机制 · JuiceFS FUSE 适配</div>
+  <div class="badge">2026-06 · 技术分析</div>
+</div>
+
+<div class="container">
+
+  <!-- Section 1: 概念 -->
+  <div class="card">
+    <h2>① libaio 与 liburing 是什么</h2>
+    <p>两者都是 Linux 上的<strong>异步 I/O（AIO）</strong>方案，目标是：提交 I/O 请求后不阻塞，程序继续干别的事，等 I/O 完成再通知。</p>
+
+    <h3>libaio —— 老牌 Linux AIO（2000 年代初）</h3>
+    <pre><span class="comment">// 工作流程：每次操作 = 一次系统调用</span>
+<span class="func">io_submit</span>(ctx, nr, iocbpp);    <span class="comment">// 提交（系统调用）</span>
+<span class="func">io_getevents</span>(ctx, min, nr, events, timeout); <span class="comment">// 收割结果（系统调用）</span></pre>
+    <div class="note">
+      <strong>关键限制：</strong>只对 <code>O_DIRECT</code>（直接 I/O）真正异步。使用 page cache（普通 open）时退化为<strong>同步阻塞</strong>，<code>io_submit</code> 直接卡住。
+    </div>
+
+    <h3>liburing —— 新一代 io_uring（Linux 5.1+，2019）</h3>
+    <p>核心创新：内核与用户态之间建立<strong>两个共享的环形队列（Ring Buffer）</strong>，通过内存映射（mmap）直接通信，可完全绕过系统调用。</p>
+    <pre><span class="comment">// SQ Ring（提交队列）← 用户写 SQE（请求描述符）</span>
+<span class="comment">// CQ Ring（完成队列）← 用户读 CQE（完成事件）</span>
+<span class="comment">// 内核直接读写两个 Ring，无需数据拷贝</span>
+
+<span class="type">struct</span> io_uring_sqe *sqe = <span class="func">io_uring_get_sqe</span>(&ring);
+<span class="func">io_uring_prep_read</span>(sqe, fd, buf, len, offset);
+<span class="func">io_uring_submit</span>(&ring);       <span class="comment">// 通知内核（SQPOLL 模式下可省略）</span>
+
+<span class="type">struct</span> io_uring_cqe *cqe;
+<span class="func">io_uring_wait_cqe</span>(&ring, &cqe); <span class="comment">// 等结果</span></pre>
+
+    <table>
+      <tr><th>维度</th><th>libaio</th><th>liburing (io_uring)</th></tr>
+      <tr><td>提交机制</td><td>每次 io_submit = 一次系统调用</td><td>共享环形队列，SQPOLL 模式可 0 系统调用</td></tr>
+      <tr><td>真正异步条件</td><td class="tag-bad">必须 O_DIRECT</td><td class="tag-good">缓冲 I/O 也支持（io-wq 兜底）</td></tr>
+      <tr><td>支持操作类型</td><td>仅文件 I/O</td><td>文件 + 网络 + 管道 + 定时器等</td></tr>
+      <tr><td>现状</td><td class="tag-warn">逐渐被取代</td><td class="tag-good">Linux 5.1+ 推荐方案</td></tr>
+    </table>
+  </div>
+
+  <!-- Section 2: submit / reap -->
+  <div class="card">
+    <h2>② submit 和 reap 是什么</h2>
+    <p>io_uring 的使用分两个阶段：</p>
+
+    <div class="phase-row">
+      <div class="phase-box submit">
+        <div class="ph-label">阶段一</div>
+        <div class="ph-title">Submit（提交）</div>
+        <div class="ph-desc">用户把 I/O 请求写入 SQ Ring，调用 io_uring_submit() 通知内核</div>
+      </div>
+      <div class="phase-arrow">→</div>
+      <div class="phase-box reap">
+        <div class="ph-label">阶段二</div>
+        <div class="ph-title">Reap（收割）</div>
+        <div class="ph-desc">内核 I/O 完成后写入 CQ Ring，用户通过 io_uring_peek_cqe() 等读取结果</div>
+      </div>
+    </div>
+
+    <ul>
+      <li><strong>submit 慢</strong>：提交请求到内核这一步卡住了</li>
+      <li><strong>reap 慢</strong>：I/O 实际完成、把结果拿回来这一步慢（正常，是真正的等待）</li>
+    </ul>
+  </div>
+
+  <!-- Section 3: 现象分析 -->
+  <div class="card">
+    <h2>③ 客户现象：本地 vs 云上的 submit/reap 分布</h2>
+
+    <div class="compare-grid">
+      <div class="compare-box local">
+        <div class="env-label">🖥 本地集群（本地 NVMe）</div>
+        <div class="metric"><span class="metric-name">submit 耗时</span><span class="metric-val fast">快（µs~ms）</span></div>
+        <div class="metric"><span class="metric-name">reap 耗时</span><span class="metric-val slow">相对慢</span></div>
+      </div>
+      <div class="compare-box cloud">
+        <div class="env-label">☁️ 云上（云盘 / 对象存储）</div>
+        <div class="metric"><span class="metric-name">submit 耗时</span><span class="metric-val slow">慢（ms~s 级）</span></div>
+        <div class="metric"><span class="metric-name">reap 耗时</span><span class="metric-val fast">几乎立即</span></div>
+      </div>
+    </div>
+
+    <h3>根因：io_uring 的 inline execution（内联执行）机制</h3>
+    <p>io_uring 在 <code>io_uring_enter</code>（submit 系统调用）里，会先尝试在<strong>提交线程的上下文里同步执行请求</strong>，而不是立即交给 io-wq 后台线程。</p>
+
+    <pre><span class="func">io_uring_submit</span>()
+  └─ 内核 <span class="func">io_uring_enter</span>()
+       │
+       ├─ <span class="comment">尝试 inline 执行请求</span>
+       │    │
+       │    ├─ <span class="comment">底层操作返回 -EAGAIN（暂时无法完成）</span>
+       │    │     → 丢给 io-wq 后台线程异步重试
+       │    │     → submit 立即返回 ✓（<span class="string">本地 NVMe 场景</span>）
+       │    │
+       │    └─ <span class="comment">底层操作同步阻塞完成</span>
+       │          → inline 在提交线程上等完
+       │          → submit 耗时 = 实际 I/O 时间（<span class="string">云盘高延迟 → s 级</span>）</pre>
+
+    <div class="key-point">
+      <strong>结论：</strong>不同存储系统（本地盘 vs 云盘）的底层驱动返回值不同，io_uring 选择了不同的执行路径——本地盘驱动返回 <code>-EAGAIN</code>，走 io-wq 异步；云盘驱动直接同步阻塞，耗时全部计入 submit。这正是客户观察到「云上 submit 慢、reap 快」的根本原因。
+    </div>
+
+    <h3>submit 完成时序对比</h3>
+    <pre><span class="comment">== 本地 NVMe（走 io-wq）==</span>
+submit ──▶ io-wq 线程接手 ──▶ submit 立即返回
+                    ↓
+              NVMe I/O 完成 ──▶ 写 CQE ──▶ reap 拿结果（稍慢）
+
+<span class="comment">== 云盘（inline 同步执行）==</span>
+submit ──▶ 内核 inline 等云盘 I/O 完成（高延迟卡住）──▶ 写 CQE ──▶ submit 才返回
+                                                                 ↓
+                                                          reap 几乎立即完成</pre>
+  </div>
+
+  <!-- Section 4: 优化 -->
+  <div class="card">
+    <h2>④ 优化方案</h2>
+    <p>根本目标：<strong>无论云上还是本地，都让 submit 快速返回，I/O 真正异步化。</strong></p>
+
+    <div class="opt-grid">
+      <div class="opt-card">
+        <div class="opt-num">1</div>
+        <div class="opt-title">强制异步 IOSQE_ASYNC（最直接）</div>
+        <div class="opt-desc">给每个 SQE 设置该 flag，跳过 inline execution，直接丢给 io-wq 后台线程。</div>
+        <pre style="font-size:0.78rem;padding:10px 12px;margin:8px 0;border-radius:6px"><span class="type">struct</span> io_uring_sqe *sqe = <span class="func">io_uring_get_sqe</span>(&ring);
+<span class="func">io_uring_prep_read</span>(sqe, fd, buf, len, offset);
+sqe->flags |= IOSQE_ASYNC;  <span class="comment">// 强制异步</span>
+<span class="func">io_uring_submit</span>(&ring);      <span class="comment">// 立即返回</span></pre>
+        <span class="eff high">效果：高</span>
+      </div>
+      <div class="opt-card">
+        <div class="opt-num">2</div>
+        <div class="opt-title">SQPOLL 模式（消除 submit 系统调用）</div>
+        <div class="opt-desc">内核起专属线程轮询 SQ Ring，用户写完 SQE 无需调用 io_uring_submit()。</div>
+        <pre style="font-size:0.78rem;padding:10px 12px;margin:8px 0;border-radius:6px"><span class="type">struct</span> io_uring_params params = {};
+params.flags |= IORING_SETUP_SQPOLL;
+params.sq_thread_idle = <span class="number">2000</span>; <span class="comment">// 2s 后休眠</span>
+<span class="func">io_uring_queue_init_params</span>(DEPTH, &ring, &params);</pre>
+        <div class="note" style="margin:6px 0;font-size:0.82rem">代价：SQ 线程持续占一个 CPU 核，适合高吞吐场景。</div>
+        <span class="eff high">效果：高（高负载）</span>
+      </div>
+      <div class="opt-card">
+        <div class="opt-num">3</div>
+        <div class="opt-title">批量提交 + 批量收割</div>
+        <div class="opt-desc">攒多个 SQE 一次 submit，减少系统调用次数，摊薄单次开销。</div>
+        <pre style="font-size:0.78rem;padding:10px 12px;margin:8px 0;border-radius:6px"><span class="comment">// 一次提交多个请求</span>
+<span class="keyword">for</span> (i = <span class="number">0</span>; i < BATCH_SIZE; i++) {
+  sqe = <span class="func">io_uring_get_sqe</span>(&ring);
+  <span class="func">io_uring_prep_read</span>(sqe, fds[i], bufs[i], len, off[i]);
+  sqe->flags |= IOSQE_ASYNC;
+}
+<span class="func">io_uring_submit</span>(&ring);
+<span class="comment">// 批量收割</span>
+n = <span class="func">io_uring_peek_batch_cqe</span>(&ring, cqes, BATCH_SIZE);</pre>
+        <span class="eff medium">效果：中</span>
+      </div>
+      <div class="opt-card">
+        <div class="opt-num">4</div>
+        <div class="opt-title">提交线程与收割线程分离</div>
+        <div class="opt-desc">submit 线程即使被云盘阻塞也不影响主业务逻辑；收割线程独立处理完成事件。</div>
+        <pre style="font-size:0.78rem;padding:10px 12px;margin:8px 0;border-radius:6px"><span class="comment">// 生产线程 → 提交线程（可能阻塞）</span>
+<span class="comment">//                      ↓</span>
+<span class="comment">//             收割线程（独立拿结果）</span>
+<span class="func">pthread_create</span>(..., submit_thread, &ring);
+<span class="func">pthread_create</span>(..., reap_thread, &ring);</pre>
+        <span class="eff medium">效果：中（架构调整）</span>
+      </div>
+    </div>
+
+    <h3>增大队列深度（云盘专项）</h3>
+    <p>云盘延迟高但带宽大，适合增大 inflight 请求数，让 I/O 充分流水线化：</p>
+    <pre><span class="comment">// 云上可将队列深度从默认 64 提升到 256~1024</span>
+<span class="func">io_uring_queue_init</span>(<span class="number">512</span>, &ring, <span class="number">0</span>);</pre>
+  </div>
+
+  <!-- Section 5: JuiceFS / FUSE -->
+  <div class="card">
+    <h2>⑤ JuiceFS（FUSE 文件系统）场景的特殊性</h2>
+
+    <h3>JuiceFS 的 I/O 路径</h3>
+    <pre>应用进程
+   │  io_uring / read / write
+   ▼
+VFS（内核虚拟文件系统层）
+   │
+   ▼
+FUSE 内核模块  ←── io_uring 只能影响到这里
+   │  /dev/fuse 通信
+   ▼
+JuiceFS 用户态进程（Go 程序）
+   │  HTTP 请求
+   ▼
+对象存储（S3 / OSS / 阿里云 OSS ...）</pre>
+
+    <div class="info">
+      <strong>注意：</strong>JuiceFS 本身<strong>支持 O_DIRECT</strong>。本次客户场景是任务代码<strong>没有使用 O_DIRECT</strong>，所以 libaio 走了缓冲 I/O 同步路径，io_uring 的 inline execution 也受此影响。
+    </div>
+
+    <h3>各优化方案在 JuiceFS 上的效果</h3>
+    <table>
+      <tr><th>优化方案</th><th>在 JuiceFS/FUSE 上的效果</th><th>原因</th></tr>
+      <tr>
+        <td><code>IOSQE_ASYNC</code></td>
+        <td class="tag-warn">部分有效</td>
+        <td>submit 不卡了，但 io-wq 线程仍阻塞在 FUSE 操作上，只是转移了阻塞点</td>
+      </tr>
+      <tr>
+        <td>SQPOLL 模式</td>
+        <td class="tag-bad">基本无效</td>
+        <td>内核 SQ 轮询线程执行 FUSE 操作时照样阻塞</td>
+      </tr>
+      <tr>
+        <td><code>O_DIRECT</code></td>
+        <td class="tag-good">有效（JuiceFS 支持）</td>
+        <td>绕过 page cache，避免缓冲 I/O 同步路径，需要应用层显式开启</td>
+      </tr>
+      <tr>
+        <td>多线程并发 io_uring</td>
+        <td class="tag-good">有效</td>
+        <td>多个 io-wq 线程并行阻塞，聚合吞吐上去</td>
+      </tr>
+      <tr>
+        <td>批量提交 + 大队列深度</td>
+        <td class="tag-good">有效</td>
+        <td>多请求同时 inflight，流水线化</td>
+      </tr>
+      <tr>
+        <td><strong>调 JuiceFS 挂载参数</strong></td>
+        <td class="tag-good" style="font-weight:700">最有效</td>
+        <td>直接作用于 JuiceFS 内部并发层，效果最直接</td>
+      </tr>
+    </table>
+
+    <h3>JuiceFS 关键挂载参数</h3>
+    <pre>juicefs mount ... \
+  --buffer-size=<span class="number">4096</span>     <span class="comment"># 读写缓冲区大小（MB）</span>
+  --max-uploads=<span class="number">50</span>       <span class="comment"># 上传并发数</span>
+  --max-downloads=<span class="number">50</span>     <span class="comment"># 下载并发数</span>
+  --prefetch=<span class="number">10</span>          <span class="comment"># 预读并发</span></pre>
+
+    <div class="key-point">
+      <strong>结论：</strong>io_uring 的优化对 JuiceFS 这类 FUSE 文件系统帮助有限。最简单有效的组合是：<br>
+      <br>
+      1. 应用层开启 <code>O_DIRECT</code>（如果任务允许）<br>
+      2. 给所有 SQE 加 <code>IOSQE_ASYNC</code> flag，先确认 submit 是否变快<br>
+      3. 调 JuiceFS 自身的并发参数（<code>--max-downloads</code> 等），收益最直接
+    </div>
+  </div>
+
+  <div style="text-align:center;color:#999;font-size:0.82rem;padding:20px 0 40px">
+    jerrycaimin.github.io · 2026-06
+  </div>
+</div>
+</body>
+</html>
