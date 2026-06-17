@@ -453,24 +453,17 @@ JuiceFS 用户态进程（Go 程序）
       </tr>
     </table>
 
-    <h3>JuiceFS 关键挂载参数</h3>
-    <pre>juicefs mount ... \
-  --buffer-size=<span class="number">4096</span>     <span class="comment"># 读写缓冲区大小（MB）</span>
-  --max-uploads=<span class="number">50</span>       <span class="comment"># 上传并发数</span>
-  --max-downloads=<span class="number">50</span>     <span class="comment"># 下载并发数</span>
-  --prefetch=<span class="number">10</span>          <span class="comment"># 预读并发</span></pre>
-
     <div class="key-point">
       <strong>结论：</strong>io_uring 的优化对 JuiceFS 这类 FUSE 文件系统帮助有限。最简单有效的组合是：<br>
       <br>
       1. 应用层开启 <code>O_DIRECT</code>（如果任务允许）<br>
       2. 给所有 SQE 加 <code>IOSQE_ASYNC</code> flag，先确认 submit 是否变快<br>
-      3. 调 JuiceFS 自身的并发参数（<code>--max-downloads</code> 等），收益最直接
+      3. 若下载并发成为瓶颈，可将 <code>--max-downloads</code> 从默认 200 提升至 400
     </div>
   </div>
 
-  <div style="text-align:center;color:#999;font-size:0.82rem;padding:20px 0 40px">
-    jerrycaimin.github.io · 2026-06
+  <div style="text-align:center;color:#bbb;font-size:0.82rem;padding:20px 0 40px">
+    本文仅供参考 · jerrycaimin.github.io · 2026-06
   </div>
 </div>
 </body>
