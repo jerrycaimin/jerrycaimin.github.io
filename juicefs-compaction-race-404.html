@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JuiceFS Compaction Race：追加写日志文件触发 404 与 hang 深度分析 · 2026-07</title>
+<style>
+  :root {
+    --primary: #1a1a2e;
+    --accent: #e94560;
+    --accent2: #0f3460;
+    --bg: #f8f9fa;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --code-bg: #1e1e2e;
+    --code-fg: #cdd6f4;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --success: #10b981;
+    --info: #3b82f6;
+    --muted: #64748b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: #1e293b;
+    line-height: 1.7;
+  }
+  .hero {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    color: white;
+    padding: 60px 40px 50px;
+  }
+  .hero-inner { max-width: 960px; margin: 0 auto; }
+  .hero-tag {
+    display: inline-block;
+    background: rgba(233,69,96,0.2);
+    border: 1px solid rgba(233,69,96,0.5);
+    color: #fca5a5;
+    padding: 4px 14px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+  .hero h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1.3;
+    margin-bottom: 16px;
+  }
+  .hero .subtitle {
+    color: #94a3b8;
+    font-size: 1rem;
+    margin-bottom: 24px;
+  }
+  .hero-meta {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    font-size: 0.85rem;
+    color: #64748b;
+  }
+  .hero-meta span { color: #94a3b8; }
+  .hero-meta strong { color: #e2e8f0; }
+  .container { max-width: 960px; margin: 0 auto; padding: 40px 24px; }
+  .section { margin-bottom: 52px; }
+  h2 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--primary);
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--accent);
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  h2 .num {
+    background: var(--accent);
+    color: white;
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.9rem;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--accent2);
+    margin: 24px 0 12px;
+  }
+  p { margin-bottom: 14px; }
+  ul, ol { padding-left: 22px; margin-bottom: 14px; }
+  li { margin-bottom: 6px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  .card.warn { border-left: 4px solid var(--warn); }
+  .card.danger { border-left: 4px solid var(--danger); }
+  .card.success { border-left: 4px solid var(--success); }
+  .card.info { border-left: 4px solid var(--info); }
+  pre, code {
+    font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace;
+    font-size: 0.85rem;
+  }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    padding: 20px 24px;
+    border-radius: 10px;
+    overflow-x: auto;
+    margin: 16px 0;
+    line-height: 1.6;
+  }
+  code {
+    background: #e2e8f0;
+    color: #be123c;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.82rem;
+  }
+  pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .c-green  { color: #a6e3a1; }
+  .c-yellow { color: #f9e2af; }
+  .c-red    { color: #f38ba8; }
+  .c-blue   { color: #89b4fa; }
+  .c-cyan   { color: #89dceb; }
+  .c-purple { color: #cba6f7; }
+  .c-comment{ color: #6c7086; }
+  .c-dim    { color: #585b70; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 0.88rem;
+  }
+  th {
+    background: var(--primary);
+    color: white;
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 600;
+  }
+  td {
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  tr:nth-child(even) td { background: #f8fafc; }
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+  .badge-red    { background: #fee2e2; color: #b91c1c; }
+  .badge-green  { background: #d1fae5; color: #065f46; }
+  .badge-blue   { background: #dbeafe; color: #1e40af; }
+  .badge-yellow { background: #fef3c7; color: #92400e; }
+  .badge-gray   { background: #f1f5f9; color: #475569; }
+  .tip-box {
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 16px 0;
+    font-size: 0.9rem;
+  }
+  .tip-box strong { color: #0369a1; }
+  .warn-box {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 16px 0;
+    font-size: 0.9rem;
+  }
+  .warn-box strong { color: #92400e; }
+  .danger-box {
+    background: #fff1f2;
+    border: 1px solid #fecaca;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 16px 0;
+    font-size: 0.9rem;
+  }
+  .danger-box strong { color: #991b1b; }
+  .success-box {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 16px 0;
+    font-size: 0.9rem;
+  }
+  .success-box strong { color: #065f46; }
+  .toc {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin: 0 0 40px;
+  }
+  .toc-title { font-weight: 700; margin-bottom: 12px; color: var(--primary); }
+  .toc ul { list-style: none; padding: 0; }
+  .toc li { margin: 8px 0; }
+  .toc a { color: var(--accent2); text-decoration: none; font-size: 0.93rem; }
+  .toc a:hover { color: var(--accent); text-decoration: underline; }
+  .footer {
+    text-align: center;
+    padding: 32px;
+    color: var(--muted);
+    font-size: 0.82rem;
+    border-top: 1px solid var(--border);
+    margin-top: 24px;
+  }
+  .quote {
+    background: #f8fafc;
+    border-left: 4px solid var(--accent2);
+    padding: 14px 20px;
+    margin: 16px 0;
+    font-style: italic;
+    font-size: 0.92rem;
+    color: #334155;
+    border-radius: 0 8px 8px 0;
+  }
+  .timeline {
+    position: relative;
+    padding-left: 28px;
+    margin: 20px 0;
+  }
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 10px; top: 8px; bottom: 8px;
+    width: 2px;
+    background: linear-gradient(to bottom, var(--accent2), var(--accent));
+    border-radius: 2px;
+  }
+  .tl-item {
+    position: relative;
+    margin-bottom: 18px;
+    padding-left: 4px;
+  }
+  .tl-item::before {
+    content: '';
+    position: absolute;
+    left: -22px; top: 8px;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--accent2);
+    border: 2px solid white;
+    box-shadow: 0 0 0 2px var(--accent2);
+  }
+  .tl-item.red::before  { background: var(--danger);  box-shadow: 0 0 0 2px var(--danger);  }
+  .tl-item.green::before{ background: var(--success); box-shadow: 0 0 0 2px var(--success); }
+  .tl-item.warn::before { background: var(--warn);    box-shadow: 0 0 0 2px var(--warn);    }
+  .tl-title { font-weight: 600; font-size: 0.95rem; margin-bottom: 4px; }
+  .tl-body  { font-size: 0.88rem; color: #475569; line-height: 1.55; }
+  .tl-code  { display: block; background: #f1f5f9; border-radius: 6px; padding: 6px 12px; margin-top: 6px; font-family: "SF Mono",monospace; font-size: 0.8rem; color: #1e293b; }
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 16px 0;
+  }
+  @media (max-width: 640px) { .two-col { grid-template-columns: 1fr; } }
+  .col-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+  }
+  .col-card.bad  { border-top: 3px solid var(--danger); }
+  .col-card.good { border-top: 3px solid var(--success); }
+  .col-card .col-label {
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 10px;
+  }
+  .col-card.bad  .col-label { color: var(--danger); }
+  .col-card.good .col-label { color: var(--success); }
+  .info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 14px;
+    margin: 16px 0;
+  }
+  .info-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    text-align: center;
+  }
+  .info-item .val { font-size: 1.6rem; font-weight: 700; color: var(--accent); }
+  .info-item .lbl { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-tag">JuiceFS EE · Compaction · 线上问题分析</div>
+    <h1>追加写日志文件触发 Compaction 竞争：<br>404 与 ls/stat hang 的完整分析</h1>
+    <p class="subtitle">
+      AI 训练任务持续追加写日志，导致数万个碎片 slice，后台 Compaction 竞争引发 OSS 404，
+      继而使读操作 hang 数分钟。本文还原完整链路，并给出实际的治理建议。
+    </p>
+    <div class="hero-meta">
+      <span>日期 <strong>2026-07-22</strong></span>
+      <span>版本 <strong>JuiceFS EE 5.3</strong></span>
+      <span>场景 <strong>AI 训练日志 + 追加写</strong></span>
+      <span>👁 <img src="https://hits.sh/jerrycaimin.github.io/juicefs-compaction-race-404.svg" alt="views" style="vertical-align:middle;margin-left:4px;"></span>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+  <div class="toc">
+    <div class="toc-title">📋 目录</div>
+    <ul>
+      <li><a href="#s0">① 现象速览</a></li>
+      <li><a href="#s1">② 根因：Compaction 竞争与 OSS 404</a></li>
+      <li><a href="#s2">③ 404 的完整调用链与关键代码</a></li>
+      <li><a href="#s3">④ 为什么读一次文件以后 ls/stat 也 hang？</a></li>
+      <li><a href="#s4">⑤ 根本诱因：追加写产生了多少碎片？</a></li>
+      <li><a href="#s5">⑥ 数据有没有丢失？</a></li>
+      <li><a href="#s6">⑦ 不干预的话多久能自愈？</a></li>
+      <li><a href="#s7">⑧ 客户如何正确使用追加写 log 模式</a></li>
+    </ul>
+  </div>
+
+  <!-- ====== S0 现象速览 ====== -->
+  <div class="section" id="s0">
+    <h2><span class="num">1</span>现象速览</h2>
+
+    <div class="info-grid">
+      <div class="info-item">
+        <div class="val">10,596+</div>
+        <div class="lbl">单文件碎片 slice 数</div>
+      </div>
+      <div class="info-item">
+        <div class="val" style="color:var(--danger)">404</div>
+        <div class="lbl">OSS NoSuchKey 报错</div>
+      </div>
+      <div class="info-item">
+        <div class="val" style="color:var(--warn)">~2 分钟</div>
+        <div class="lbl">单次读 hang 时长（默认配置）</div>
+      </div>
+      <div class="info-item">
+        <div class="val" style="color:var(--success)">无</div>
+        <div class="lbl">实际数据丢失</div>
+      </div>
+    </div>
+
+    <h3>复现日志</h3>
+    <pre>2026/07/22 22:08:52.270661 juicefs[1225513] <span class="c-yellow">&lt;WARNING&gt;</span>: fail to read chunkid 142451734 (off:0, size:182, clen: 182):
+  get chunks/16/142/142451734_0_182: operation error GetObject:
+  Http Status Code: <span class="c-red">404</span>. Error Code: NoSuchKey.
+  Message: The specified key does not exist.
+  Request Endpoint: GET http://...oss-cn-beijing-internal.aliyuncs.com/juicefs/chunks/16/142/142451734_0_182
+  [readSlice@data.go:548]
+
+2026/07/22 22:08:52.270692 juicefs[1225513] <span class="c-blue">&lt;INFO&gt;</span>: can't compact chunk 142532189, retry later
+  [compact@data.go:913]</pre>
+
+    <div class="warn-box">
+      <strong>关键观察：</strong>两行日志相差仅 <strong>30 微秒</strong>，来自同一进程（PID 1225513），
+      均是同一次 <code>compact()</code> 调用产生的——<strong>不是普通读，是 Compaction 在读碎片时失败了</strong>。
+    </div>
+  </div>
+
+  <!-- ====== S1 根因 ====== -->
+  <div class="section" id="s1">
+    <h2><span class="num">2</span>根因：Compaction 竞争与 OSS 404</h2>
+
+    <p>
+      JuiceFS 的追加写会每次产生一个新的 <strong>slice（碎片）</strong>，每个 slice 是 OSS 上的独立对象。
+      文件碎片过多时，meta server 会调度后台 <strong>Compaction</strong>：把多个小 slice 合并成一个大对象，
+      释放 OSS 对象数，减少读 I/O。
+    </p>
+
+    <h3>完整 Race 时间线</h3>
+    <div class="card">
+      <div class="timeline">
+
+        <div class="tl-item">
+          <div class="tl-title">训练任务持续追加写 →  生成大量小碎片</div>
+          <div class="tl-body">
+            每次 flush/write 在 OSS 上产生一个独立对象，如 <code>142451734_0_182</code>（仅 182 字节）、
+            <code>142532189_0_xxx</code> 等，最终累积 10,596+ 个 slice。
+          </div>
+        </div>
+
+        <div class="tl-item green">
+          <div class="tl-title">🟢 Compaction Job A（先完成）</div>
+          <div class="tl-body">
+            meta server 下发 <code>REP_CHUNK_COMPACT</code> 给某客户端，携带当时的 slice 列表，<strong>包含 142451734</strong>。<br>
+            客户端：读取所有 slice → 合并写入新大块 <code>142563040_0_283734</code>（283 KB）。<br>
+            <code>compact2()</code> 在 meta 更新引用：chunkIndex 0 → 142563040。<br>
+            发送 <code>REP_CHUNK_DEL</code> → 客户端删除 OSS 对象 <code>142451734_0_182</code>。
+            <span class="tl-code">chunks/16/142/142451734_0_182 → 已从 OSS 删除 ✓</span>
+          </div>
+        </div>
+
+        <div class="tl-item warn">
+          <div class="tl-title">⚠️ Compaction Job B（稍后调度，持有旧 slice 快照）</div>
+          <div class="tl-body">
+            Job B 的 slice 列表是在 Job A <strong>完成之前</strong>就从 meta 读取并下发的，仍包含 142451734。<br>
+            调度窗口内 meta 已更新但 Job B 的快照未刷新。
+          </div>
+        </div>
+
+        <div class="tl-item red">
+          <div class="tl-title">🔴 Job B 读取 142451734 → OSS 404</div>
+          <div class="tl-body">
+            <code>compact(chunkid=142532189)</code> 调用 <code>readChunk()</code> → <code>readSlice(slice.chunkid=142451734)</code><br>
+            OSS 返回 404（对象已被 Job A 删除）
+            <span class="tl-code">fail to read chunkid 142451734  [readSlice@data.go:548]</span>
+            <code>readChunk()</code> 返回 0，<code>compact()</code> 记录 INFO 并返回 EIO：
+            <span class="tl-code">can't compact chunk 142532189, retry later  [compact@data.go:913]</span>
+          </div>
+        </div>
+
+        <div class="tl-item green">
+          <div class="tl-title">🟢 meta 重新调度 Job B（使用最新 slice 引用）</div>
+          <div class="tl-body">
+            下一轮调度时，meta 提供的 slice 列表不再包含 142451734（已更新为 142563040）。<br>
+            Job B 成功，最终合并为 <code>142841250</code>（298 KB）和 <code>142841306</code>（2.2 MB）。
+          </div>
+        </div>
+
+        <div class="tl-item">
+          <div class="tl-title">训练任务继续追加 → 新碎片 142700347, 142700348...（循环）</div>
+          <div class="tl-body">文件大小从 2.44 MiB 增长至 2.68 MiB，新碎片等待下一轮压缩。</div>
+        </div>
+
+      </div>
+    </div>
+
+    <h3>竞争窗口的本质</h3>
+    <p>
+      meta server 在 <code>compact2()</code> 中先完成 slice 引用替换，再派发对象删除命令：
+    </p>
+    <pre><span class="c-comment">// cmd/meta/chunks.go  compact2()</span>
+cs.replaceSlice(...)          <span class="c-comment">// ① 先更新 meta 里的 slice 引用</span>
+for _, id := range old_ids {
+    cs.sendDelChunk(...)      <span class="c-comment">// ② 再派发对象删除（发往随机客户端）</span>
+}</pre>
+    <p>
+      但 <strong>Job B 的 slice 列表</strong>是在步骤 ① 之前就已经下发给客户端的快照，
+      等 Job B 真正执行时，② 已经删除了 OSS 对象 → 404。
+    </p>
+  </div>
+
+  <!-- ====== S2 调用链 ====== -->
+  <div class="section" id="s2">
+    <h2><span class="num">3</span>404 的完整调用链与关键代码</h2>
+
+    <pre><span class="c-comment">// 两行 WARNING/INFO 日志的真实调用栈（同一 goroutine）</span>
+
+<span class="c-blue">compact(server, inode, chunkid=142532189, chunks=[..., {Chunkid:142451734,...}, ...], nchunkid, false)</span>
+  │  pkg/fs/data.go:842
+  │
+  ├─ writer.SetWriteback(false)
+  │
+  └─ for pos &lt; total:
+       p := chunk.NewOffPage(l)
+       n := <span class="c-yellow">d.readChunk(ctx, p, chunks, pos, ...)</span>
+              │
+              └─ for each slice in chunks:
+                   <span class="c-yellow">d.readSlice(ctx, slice, page, off, updateProgress)</span>
+                     │  pkg/fs/data.go:533
+                     │
+                     ├─ reader := d.store.NewReader(slice.Chunkid=<span class="c-red">142451734</span>, int(slice.Clen))
+                     ├─ reader.ReadAt(ctx, p, off)  <span class="c-comment">→ OSS GET → 404</span>
+                     └─ <span class="c-red">n==0, err!=nil</span>
+                          └─ logger.Warningf("fail to read chunkid 142451734...")
+                             <span class="c-comment">// ← 第 1 行日志  [readSlice@data.go:548]</span>
+                             return err
+
+       n == 0  (readChunk 返回 0)
+       logger.Infof("can't compact chunk 142532189, retry later")
+       <span class="c-comment">// ← 第 2 行日志  [compact@data.go:913]</span>
+       return syscall.EIO</pre>
+
+    <h3>关键源码（已定位）</h3>
+
+    <table>
+      <thead><tr><th>文件</th><th>行号</th><th>作用</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>pkg/fs/data.go</code></td>
+          <td>533–556</td>
+          <td><code>readSlice()</code>：读单个 slice；n==0 且 err!=nil 时打 WARNING 并返回错误</td>
+        </tr>
+        <tr>
+          <td><code>pkg/fs/data.go</code></td>
+          <td>890–960</td>
+          <td><code>compact()</code>：调用 readChunk，n==0 时打 INFO "can't compact ... retry later" 返回 EIO</td>
+        </tr>
+        <tr>
+          <td><code>cmd/meta/chunks.go</code></td>
+          <td>compact2()</td>
+          <td>meta 端：替换 slice 引用 → 派发 <code>REP_CHUNK_DEL</code>；竞争窗口在这里产生</td>
+        </tr>
+        <tr>
+          <td><code>cmd/meta/server.go</code></td>
+          <td>sendDelChunk()</td>
+          <td>把删除命令发往<strong>随机一个</strong>连接的挂载客户端执行真正的 OSS 对象删除</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="tip-box">
+      <strong>📌 注意：</strong><code>readSlice@data.go:548</code> 出现在 WARNING 日志里，
+      说明调用来自 <code>compact()</code> 的读阶段，<strong>不是用户 I/O 读失败</strong>。
+      区分这一点对判断数据完整性很重要（见下方「数据有没有丢失」一节）。
+    </div>
+  </div>
+
+  <!-- ====== S3 ls/stat hang ====== -->
+  <div class="section" id="s3">
+    <h2><span class="num">4</span>为什么读一次文件以后 ls/stat 也 hang？</h2>
+
+    <p>
+      这是与 Compaction 404 并发的第二个症状。
+      当<strong>用户真正的读请求</strong>（不是 compact）碰到同样的 404 时，会触发一条更长的 hang 链路：
+    </p>
+
+    <pre><span class="c-blue">FUSE Read(inode, offset, size)</span>
+  └→ vfs.Read2()
+       └→ ind.read0()
+            └→ prepareRequests()
+            └→ <span class="c-yellow">waitForIO()</span>   <span class="c-comment">← 阻塞在此，等待 rreq.mode == READY</span>
+                  ↑ (300ms 轮询一次，timeout=0 时永不超时)
+                  │
+            [后台 goroutine] rrequest.run():
+                  └→ readChunk() → readSlice(chunkid=X) → OSS 404
+                  └→ n==0 → <span class="c-red">ind.trycnt++</span>
+                  └→ 等待 retry_time(trycnt) 后重试
+                  └→ ...重复 ioretries 次...</pre>
+
+    <h3>retry_time 的累积延迟</h3>
+    <table>
+      <thead><tr><th>trycnt</th><th>单次等待</th><th>累积时间</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>1 ms</td><td>1 ms</td></tr>
+        <tr><td>2</td><td>301 ms</td><td>302 ms</td></tr>
+        <tr><td>3</td><td>601 ms</td><td>903 ms</td></tr>
+        <tr><td>…</td><td>+300ms/次</td><td>…</td></tr>
+        <tr><td>29</td><td>8,701 ms</td><td>~122 s</td></tr>
+        <tr style="background:#fef2f2"><td><strong>30（最后一次）</strong></td><td>10,000 ms（上限）</td><td><strong>~132 s ≈ 2 分钟</strong></td></tr>
+      </tbody>
+    </table>
+
+    <p>
+      在这 ~2 分钟里，<code>waitForIO()</code> 不返回 → FUSE Read 不返回 → 内核 FUSE 模块等待回复
+      → <strong>内核持有该 inode 的 page lock</strong> → 任何其他进程对同一 inode 做 <code>stat(2)</code>/<code>readdir(2)</code>
+      需要获取 page lock → 排队阻塞。
+    </p>
+
+    <div class="warn-box">
+      <strong>⚠️ 这就是 <code>cat /sys/fs/fuse/connections/3102/waiting = 2</code> 的原因：</strong>
+      2 个内核 FUSE 请求（通常是 read + stat/ls）卡在等待挂载客户端回复。
+    </div>
+
+    <p>
+      ~2 分钟后，<code>ind.trycnt &gt;= ioretries（默认 30）</code> → <code>rreq.done(syscall.EIO, 0)</code>
+      → <code>waitForIO()</code> 返回 → FUSE 回复 EIO → page lock 释放 → ls/stat 解除阻塞，得到 I/O error。
+    </p>
+  </div>
+
+  <!-- ====== S4 碎片 ====== -->
+  <div class="section" id="s4">
+    <h2><span class="num">5</span>根本诱因：追加写产生了多少碎片？</h2>
+
+    <p>案例文件 <code>train_20260721_140509.log</code>（inode 15836804）的碎片情况：</p>
+
+    <pre>$ juicefs info /jfs/.../train_20260721_140509.log
+  length: 2.44 MiB (2,560,871 Bytes)
+objects:
++------------+------------------------------------------+--------+--------+--------+
+| chunkIndex |                objectName                |  size  | offset | length |
++------------+------------------------------------------+--------+--------+--------+
+|          0 | juicefs/chunks/E0/142/<span class="c-green">142563040_0_283734</span> | 283734 |      0 | 283734 |  <span class="c-comment">← 已压缩</span>
+|          1 | juicefs/chunks/3B/142/<span class="c-green">142563131_0_28606</span>  |  28606 |      0 |  28606 |  <span class="c-comment">← 已压缩</span>
+|          2 | juicefs/chunks/26/141/<span class="c-red">141361702_0_192</span>   |    192 |      0 |    192 |  <span class="c-comment">← 碎片</span>
+|          3 | juicefs/chunks/27/141/<span class="c-red">141361703_0_195</span>   |    195 |      0 |    195 |  <span class="c-comment">← 碎片</span>
+|    ...     |                  ...                     |   ~192 |      0 |   ~192 |  <span class="c-comment">← 碎片</span>
+|      10596 | juicefs/chunks/ED/142/<span class="c-red">142699245_0_218</span>   |    218 |      0 |    218 |  <span class="c-comment">← 碎片</span>
++------------+------------------------------------------+--------+--------+--------+</pre>
+
+    <div class="info-grid">
+      <div class="info-item">
+        <div class="val">~195 B</div>
+        <div class="lbl">平均碎片大小</div>
+      </div>
+      <div class="info-item">
+        <div class="val">10,594</div>
+        <div class="lbl">待压缩碎片数</div>
+      </div>
+      <div class="info-item">
+        <div class="val" style="color:var(--danger)">极高</div>
+        <div class="lbl">Compaction 并发压力</div>
+      </div>
+      <div class="info-item">
+        <div class="val" style="color:var(--warn)">持续增加</div>
+        <div class="lbl">写入速度 vs 压缩速度</div>
+      </div>
+    </div>
+
+    <p>
+      每次 <code>fwrite()</code> + <code>fflush()</code> 在 JuiceFS 中产生一个新 slice，
+      而训练框架通常每行/每 step 都会 flush，因此日志文件碎片数量与日志行数成正比。
+      碎片数超过阈值后，meta server 会并发调度大量 Compaction job，<strong>两个 job 使用同一个 slice 的概率随并发量线性增加</strong>，
+      Race 从偶发变为必现。
+    </p>
+
+    <h3>手动 compact 后的对比</h3>
+    <pre>$ juicefs compact /jfs/.../train_20260721_140509.log  <span class="c-comment"># 手动触发压缩</span>
+$ juicefs info /jfs/.../train_20260721_140509.log
+  length: 2.68 MiB (2,810,759 Bytes)
++------------+-------------------------------------------+---------+--------+---------+
+| chunkIndex |                 objectName                |   size  | offset |  length |
++------------+-------------------------------------------+---------+--------+---------+
+|          0 | juicefs/chunks/E0/142/<span class="c-green">142563040_0_283734</span>  |  283734 |      0 |  283734 |
+|          1 | juicefs/chunks/A2/142/<span class="c-green">142841250_0_298752</span>  |  298752 |      0 |  298752 |
+|          2 | juicefs/chunks/DA/142/<span class="c-green">142841306_0_2227160</span> | 2227160 |      0 | 2227160 |  <span class="c-comment">← 2.2 MB 大块！</span>
+|          3 | juicefs/chunks/3B/142/<span class="c-red">142700347_0_223</span>    |     223 |      0 |     223 |  <span class="c-comment">← 新追加碎片</span>
+|          4 | juicefs/chunks/3C/142/<span class="c-red">142700348_0_224</span>    |     224 |      0 |     224 |
++------------+-------------------------------------------+---------+--------+---------+</pre>
+
+    <div class="success-box">
+      <strong>✅ 结论：</strong> 手动 <code>juicefs compact</code> 成功将 10,594 个碎片合并为 1 个 2.2 MB 大块，
+      无任何报错。证明数据完整，Race 是调度级问题，不是存储级问题。
+    </div>
+  </div>
+
+  <!-- ====== S5 数据丢失 ====== -->
+  <div class="section" id="s5">
+    <h2><span class="num">6</span>数据有没有丢失？</h2>
+
+    <div class="success-box">
+      <strong>✅ 没有数据丢失。</strong>
+    </div>
+
+    <p>以下是完整推理：</p>
+
+    <div class="two-col">
+      <div class="col-card bad">
+        <div class="col-label">❌ 表面看起来"丢失"</div>
+        <ul>
+          <li>OSS 对象 <code>142451734_0_182</code> 不存在</li>
+          <li>读取该 chunkid 返回 404</li>
+          <li>当前 <code>juicefs info</code> 中看不到 142451734</li>
+        </ul>
+      </div>
+      <div class="col-card good">
+        <div class="col-label">✅ 实际上数据安全</div>
+        <ul>
+          <li>142451734 的 182 字节数据已被 Job A 合并进 <code>142563040</code>（283 KB）</li>
+          <li>meta 中 chunkIndex 0 已更新为 142563040</li>
+          <li>读当前文件使用 142563040 → 成功</li>
+          <li><code>cp /jfs/.../train.log /tmp/1.log</code> 验证无误</li>
+        </ul>
+      </div>
+    </div>
+
+    <p>
+      JuiceFS Compaction 遵循 <strong>先写新 → 再更新 meta → 最后删旧</strong> 的顺序：
+    </p>
+    <pre><span class="c-comment">// compact() 成功路径  pkg/fs/data.go:940-960</span>
+if err = writer.Finish(ctx, pos); err == nil {
+    writer = nil  <span class="c-comment">// 新大块写入 OSS 成功</span>
+    <span class="c-comment">// 删除 block cache 里的旧条目（本地缓存）</span>
+    for _, c := range chunks {
+        r := d.store.NewReader(c.Chunkid, int(c.Clen))
+        g.Delete(ctx, key)   <span class="c-comment">// ← 只删本地 cache，不删 OSS</span>
+    }
+    <span class="c-comment">// 通知 meta：compact 成功，更新 slice 引用</span>
+    server.CompactChunk(chunkid, off, chunks, nchunkid)
+    <span class="c-comment">// meta 的 compact2() 才会触发 OSS 对象的实际删除</span>
+}</pre>
+    <p>
+      只要 <code>Finish()</code> 没报错，新的 OSS 对象就一定写好了，
+      meta 才会替换引用并删旧对象。整个过程<strong>原子性有保证</strong>，
+      不存在新对象未写好就删旧对象的情况。
+    </p>
+  </div>
+
+  <!-- ====== S6 自愈时间 ====== -->
+  <div class="section" id="s6">
+    <h2><span class="num">7</span>不干预的话多久能自愈？</h2>
+
+    <p>这取决于两个方向：</p>
+
+    <h3>方向 A：Compaction 404 自愈（快）</h3>
+    <p>
+      "can't compact chunk X, retry later" 之后，meta 会在下一轮 Compaction 调度时使用最新的 slice 引用重试，
+      通常 <strong>几秒到几十秒</strong>内 Job B 就能成功完成（用更新后的引用）。
+    </p>
+    <div class="success-box">
+      <strong>Compaction 本身：自愈很快，无需干预。</strong>
+    </div>
+
+    <h3>方向 B：碎片堆积 / 新碎片持续产生（不会自愈）</h3>
+    <p>
+      如果训练任务一直在运行并持续追加写，新碎片的产生速度往往快于 Compaction 合并速度：
+    </p>
+    <div class="warn-box">
+      <strong>⚠️ 碎片堆积问题不会自愈</strong>——只要写入在继续，竞争就会持续发生，
+      404 日志会周期性出现，用户 I/O 会周期性 hang 几秒~2 分钟。
+    </div>
+
+    <h3>方向 C：单次读 hang（有上限）</h3>
+    <p>
+      假设真的是用户读请求碰到了 404（而不是 compact 路径），hang 时长有确定的上限：
+    </p>
+    <pre><span class="c-comment">// pkg/fs/readdata.go  retry_time()</span>
+sum = Σ (i=1..29) [(i-1)*300ms + 1ms]  +  10s（第30次上限）
+    ≈ 122s + 10s ≈ <span class="c-yellow">132 秒（约 2 分钟）</span>  <span class="c-comment">// 默认 --io-retries=30</span></pre>
+    <p>之后返回 EIO，调用方看到 I/O error，hang 解除。</p>
+
+    <table>
+      <thead><tr><th>症状</th><th>自愈？</th><th>时间</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>compact 404 报错</td>
+          <td><span class="badge badge-green">会</span></td>
+          <td>几秒~几十秒，下一轮调度时</td>
+        </tr>
+        <tr>
+          <td>用户读 hang</td>
+          <td><span class="badge badge-yellow">有上限</span></td>
+          <td>最长约 2 分钟（默认 io-retries=30），之后 EIO</td>
+        </tr>
+        <tr>
+          <td>碎片堆积</td>
+          <td><span class="badge badge-red">不会</span></td>
+          <td>只要追加写持续，就会持续产生</td>
+        </tr>
+        <tr>
+          <td>ls/stat hang</td>
+          <td><span class="badge badge-yellow">有上限</span></td>
+          <td>随用户读 hang 解除（同一 page lock）</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ====== S7 建议 ====== -->
+  <div class="section" id="s7">
+    <h2><span class="num">8</span>客户如何正确使用追加写 log 模式</h2>
+
+    <p>如果客户确实需要在 JuiceFS 上持续追加写日志，以下是按优先级排列的建议：</p>
+
+    <h3>建议 1（最有效）：减少 flush 频率，批量写入</h3>
+    <div class="card info">
+      <p>
+        每次 <code>fflush()</code> 或 <code>fsync()</code> 都会在 JuiceFS 层产生一个新 slice。
+        训练框架如果每行/每 step 都 flush，一分钟可能产生数百个碎片。
+      </p>
+      <p><strong>改为按时间（如每 5s）或按大小（如 1 MB）批量刷盘：</strong></p>
+      <pre><span class="c-comment"># Python 示例：用行缓冲替代即时 flush</span>
+import logging, sys
+
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.DEBUG)
+
+<span class="c-comment"># 不要每行 flush，改为按时间 flush（如 logging.handlers.TimedRotatingFileHandler）</span>
+<span class="c-comment"># 或者写到内存 buffer，定期 flush</span></pre>
+      <p>
+        每个 slice ≥ 1 MB 时，Compaction 压力大幅降低，Race 概率接近零。
+      </p>
+    </div>
+
+    <h3>建议 2：写到本地盘，任务结束后再拷贝到 JuiceFS</h3>
+    <div class="card info">
+      <p>
+        训练过程中日志写到本地 <code>/tmp</code> 或 hostPath，任务结束/checkpoint 时
+        <code>cp /tmp/train.log /jfs/.../train.log</code>。
+        这样 JuiceFS 对象是一次性写入的大文件，没有碎片问题。
+      </p>
+    </div>
+
+    <h3>建议 3（缓解）：定期手动或 cron compact</h3>
+    <div class="card info">
+      <p>如果业务无法改变写入模式，可以设置定期 compact：</p>
+      <pre><span class="c-comment"># 每 10 分钟对日志目录做一次 compact</span>
+*/10 * * * * juicefs compact /jfs/oss-import/zachytong/sipai/.../logs/ --recursive</pre>
+      <p>
+        compact 后碎片归零，Compaction Race 概率降为零，直到下一波碎片堆积。
+      </p>
+    </div>
+
+    <h3>建议 4（缓解 hang 时长）：调小 --io-retries</h3>
+    <div class="card info">
+      <p>
+        默认 <code>--io-retries=30</code> 导致单次读 hang 最长 ~2 分钟。
+        改为较小值可显著减少 hang 时长：
+      </p>
+      <table>
+        <thead><tr><th>--io-retries</th><th>最大 hang 时长</th><th>适用场景</th></tr></thead>
+        <tbody>
+          <tr><td>30（默认）</td><td>~132 秒</td><td>OSS 偶发抖动，需要高容忍</td></tr>
+          <tr><td>10</td><td>~13 秒</td><td>对延迟敏感，能接受偶发 EIO</td></tr>
+          <tr><td>5</td><td>~3 秒</td><td>快速失败，业务自行重试</td></tr>
+        </tbody>
+      </table>
+      <div class="warn-box">
+        <strong>⚠️ 注意：</strong> 调小 <code>--io-retries</code> 不能解决 404 根因，
+        只是让应用更快看到 EIO，需要应用层做好重试。
+      </div>
+    </div>
+
+    <h3>建议 5（研发层面）：meta 调度改进</h3>
+    <div class="card warn">
+      <p>
+        根本解法是 meta server 在下发 Compaction job 时，给每个 slice 加版本戳或 epoch，
+        客户端收到 404 后能判断"这个 slice 已被上一个 compact 合并，我直接用新引用"，
+        而不是 retry+EIO。这需要研发侧改动 Compaction 协议。
+      </p>
+    </div>
+
+    <h3>总结建议优先级</h3>
+    <table>
+      <thead><tr><th>优先级</th><th>方法</th><th>效果</th><th>改动成本</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="badge badge-red">P0</span></td>
+          <td>减少 flush 频率（&gt;=1MB/flush）</td>
+          <td>从根本消除碎片，Race 概率接近零</td>
+          <td>业务改代码（低～中）</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-yellow">P1</span></td>
+          <td>日志写本地，完成后拷 JuiceFS</td>
+          <td>完全消除碎片</td>
+          <td>架构调整（中）</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-blue">P2</span></td>
+          <td>定期 cron <code>juicefs compact</code></td>
+          <td>控制碎片数量上限</td>
+          <td>运维脚本（低）</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-gray">P3</span></td>
+          <td>调小 <code>--io-retries</code></td>
+          <td>缩短单次 hang 时长</td>
+          <td>挂载参数（极低）</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-gray">P4</span></td>
+          <td>研发改进 Compaction 协议</td>
+          <td>彻底消除 Race 副作用</td>
+          <td>内核研发（高）</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<div class="footer">
+  <p>JuiceFS Compaction Race Analysis · 2026-07-22 · <a href="index.html" style="color:var(--accent)">← 返回首页</a></p>
+</div>
+
+</body>
+</html>
