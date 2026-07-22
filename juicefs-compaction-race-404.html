@@ -334,7 +334,7 @@
   <div class="toc">
     <div class="toc-title">📋 目录</div>
     <ul>
-      <li><a href="#s0">① 现象速览</a></li>
+      <li><a href="#s0">① 现象速览和解决方案</a></li>
       <li><a href="#s1">② 根因：Compaction 竞争与 OSS 404</a></li>
       <li><a href="#s2">③ 404 的完整调用链与关键代码</a></li>
       <li><a href="#s3">④ 为什么读一次文件以后 ls/stat 也 hang？</a></li>
@@ -347,7 +347,7 @@
 
   <!-- ====== S0 现象速览 ====== -->
   <div class="section" id="s0">
-    <h2><span class="num">1</span>现象速览</h2>
+    <h2><span class="num">1</span>现象速览和解决方案</h2>
 
     <div class="info-grid">
       <div class="info-item">
@@ -365,6 +365,21 @@
       <div class="info-item">
         <div class="val" style="color:var(--success)">无</div>
         <div class="lbl">实际数据丢失</div>
+      </div>
+    </div>
+
+    <div class="card" style="border-left:4px solid var(--accent);padding:20px;margin-bottom:24px;">
+      <p style="margin-bottom:10px;"><strong>故障现象（用户侧）：</strong></p>
+      <ul>
+        <li><strong>元数据层面：</strong>对该文件执行 <code>ls</code> / <code>stat</code> hang 住，无响应</li>
+        <li><strong>数据层面：</strong>读取文件出现 OSS 404，block 找不到；<code>cp</code> 同样失败</li>
+      </ul>
+      <p style="margin:10px 0;">
+        <strong>解决方案：</strong>手动执行 <code>juicefs compact /jfs/.../train.log</code> 后，
+        文件立刻恢复可读，<code>ls</code> / <code>cp</code> 均正常。<strong>数据没有丢失。</strong>
+      </p>
+      <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:8px;padding:14px;margin-top:4px;">
+        <strong>⚠️ 注意：</strong>这只是暂时的恢复。只要训练任务仍在持续追加写，碎片会继续堆积，compact 竞争还会再次出现，问题可能周期性复发。根本解决需要减少 flush 频率（见 § 8 建议）。
       </div>
     </div>
 
@@ -662,6 +677,12 @@ $ juicefs info /jfs/.../train_20260721_140509.log
 
     <p>以下是完整推理：</p>
 
+    <p>
+      当时我们非常担心数据丢失——因为不仅 <code>ls</code> hang 住，执行
+      <code>cp /jfs/.../train.log /tmp/1.log</code> 同样失败，文件根本无法读取。
+      <strong>手动执行 <code>juicefs compact</code> 后，文件立刻恢复正常</strong>，<code>cp</code> 也顺利完成。
+    </p>
+
     <div class="two-col">
       <div class="col-card bad">
         <div class="col-label">❌ 表面看起来"丢失"</div>
@@ -677,11 +698,21 @@ $ juicefs info /jfs/.../train_20260721_140509.log
           <li>142451734 的 182 字节数据已被 Job A 合并进 <code>142563040</code>（283 KB）</li>
           <li>meta 中 chunkIndex 0 已更新为 142563040</li>
           <li>读当前文件使用 142563040 → 成功</li>
-          <li><code>cp /jfs/.../train.log /tmp/1.log</code> 验证无误</li>
         </ul>
       </div>
     </div>
 
+    <h3>为什么手动 compact 以后就不再 hang 了？</h3>
+    <p>
+      手动 compact 将 10,594 个碎片合并成了 3 个大块（合计约 2.8 MB），meta 中的 slice 引用全部更新为新的 chunkid。此后：
+    </p>
+    <ul>
+      <li>自动 Compaction job 读取的 slice 列表已是最新的（不再包含已被删除的旧 chunkid）</li>
+      <li>Race 窗口大幅收窄：job 之间重叠的 slice 数量从数千降为个位数</li>
+      <li>读操作使用的 chunkid 全是有效大块 → 不再 404 → <code>waitForIO()</code> 正常返回 → page lock 释放 → <code>ls</code>/<code>stat</code> 不再 hang</li>
+    </ul>
+
+    <h3>为什么数据没有丢失？</h3>
     <p>
       JuiceFS Compaction 遵循 <strong>先写新 → 再更新 meta → 最后删旧</strong> 的顺序：
     </p>
@@ -702,6 +733,10 @@ if err = writer.Finish(ctx, pos); err == nil {
       meta 才会替换引用并删旧对象。整个过程<strong>原子性有保证</strong>，
       不存在新对象未写好就删旧对象的情况。
     </p>
+    <div class="warn-box">
+      <strong>⚠️ 但问题会复发：</strong>这个 log 文件在持续增长，compact 后不久新的碎片又会堆积，
+      Race 条件会重新出现，<code>ls</code>/<code>cp</code> 可能再次 hang。根本解决方案见 § 8。
+    </div>
   </div>
 
   <!-- ====== S6 自愈时间 ====== -->
@@ -718,6 +753,22 @@ if err = writer.Finish(ctx, pos); err == nil {
     <div class="success-box">
       <strong>Compaction 本身：自愈很快，无需干预。</strong>
     </div>
+
+    <h3>参考：JuiceFS 多久会自动执行一次 compact？</h3>
+    <p>
+      JuiceFS meta server 有一个持续运行的后台 goroutine 负责调度 Compaction：
+    </p>
+    <ul>
+      <li><strong>触发条件：</strong>当某个 chunk 的 slice 数超过阈值（默认约 50 个碎片）时，meta 立即将其加入 compact 队列</li>
+      <li><strong>调度频率：</strong>meta server 持续轮询，一旦有 chunk 进入队列就下发 <code>REP_CHUNK_COMPACT</code> 给某个在线 mount 客户端——无固定周期，有需求即触发</li>
+      <li><strong>每轮处理量：</strong>每个 compact job 一次最多合并约 50~200 个 slice，生成一个新大块</li>
+      <li><strong>总耗时估算：</strong>对本案例的 10,596 个 slice，假设每轮处理 100 个、耗时 1s，完整合并约需 <strong>100+ 轮 / 1~2 分钟</strong></li>
+    </ul>
+    <p>
+      在这 1~2 分钟内，追加写还在持续生产新碎片，这就是"自动 compact 跑不过写入速度"的根本原因。
+      手动 <code>juicefs compact</code> 的优势在于一次性处理全部存量碎片，
+      而自动 compact 是分批、异步进行的，无法瞬间消灭积压。
+    </p>
 
     <h3>方向 B：碎片堆积 / 新碎片持续产生（不会自愈）</h3>
     <p>
