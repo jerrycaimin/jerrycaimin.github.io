@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JuiceFS Operator 在 ACS PPU 本地盘的实践与踩坑 · 2026-07</title>
+<style>
+  :root {
+    --primary: #1a1a2e;
+    --accent: #e94560;
+    --accent2: #0f3460;
+    --bg: #f8f9fa;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --code-bg: #1e1e2e;
+    --code-fg: #cdd6f4;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --success: #10b981;
+    --info: #3b82f6;
+    --muted: #64748b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: #1e293b;
+    line-height: 1.7;
+  }
+  .hero {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    color: white;
+    padding: 60px 40px 50px;
+  }
+  .hero-inner { max-width: 960px; margin: 0 auto; }
+  .hero-tag {
+    display: inline-block;
+    background: rgba(233,69,96,0.2);
+    border: 1px solid rgba(233,69,96,0.5);
+    color: #fca5a5;
+    padding: 4px 14px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+  .hero h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1.3;
+    margin-bottom: 16px;
+  }
+  .hero .subtitle {
+    color: #94a3b8;
+    font-size: 1rem;
+    margin-bottom: 24px;
+  }
+  .hero-meta {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    font-size: 0.85rem;
+    color: #64748b;
+  }
+  .hero-meta span { color: #94a3b8; }
+  .hero-meta strong { color: #e2e8f0; }
+  .container { max-width: 960px; margin: 0 auto; padding: 40px 24px; }
+  .section { margin-bottom: 48px; }
+  h2 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--primary);
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--accent);
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  h2 .num {
+    background: var(--accent);
+    color: white;
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.9rem;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--accent2);
+    margin: 24px 0 12px;
+  }
+  p { margin-bottom: 14px; }
+  ul, ol { padding-left: 22px; margin-bottom: 14px; }
+  li { margin-bottom: 6px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  .card.warn { border-left: 4px solid var(--warn); }
+  .card.danger { border-left: 4px solid var(--danger); }
+  .card.success { border-left: 4px solid var(--success); }
+  .card.info { border-left: 4px solid var(--info); }
+  pre, code {
+    font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace;
+    font-size: 0.85rem;
+  }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    padding: 20px 24px;
+    border-radius: 10px;
+    overflow-x: auto;
+    margin: 16px 0;
+    line-height: 1.6;
+  }
+  code {
+    background: #e2e8f0;
+    color: #be123c;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.82rem;
+  }
+  pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .c-green { color: #a6e3a1; }
+  .c-yellow { color: #f9e2af; }
+  .c-red { color: #f38ba8; }
+  .c-blue { color: #89b4fa; }
+  .c-comment { color: #6c7086; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 0.88rem;
+  }
+  th {
+    background: var(--primary);
+    color: white;
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 600;
+  }
+  td {
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  tr:nth-child(even) td { background: #f8fafc; }
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+  .badge-red { background: #fee2e2; color: #b91c1c; }
+  .badge-green { background: #d1fae5; color: #065f46; }
+  .badge-blue { background: #dbeafe; color: #1e40af; }
+  .badge-yellow { background: #fef3c7; color: #92400e; }
+  .badge-gray { background: #f1f5f9; color: #475569; }
+  .tip-box {
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 16px 0;
+    font-size: 0.9rem;
+  }
+  .tip-box strong { color: #0369a1; }
+  .warn-box {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 16px 0;
+    font-size: 0.9rem;
+  }
+  .warn-box strong { color: #92400e; }
+  .success-box {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 16px 0;
+    font-size: 0.9rem;
+  }
+  .success-box strong { color: #065f46; }
+  .compare-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 20px 0;
+  }
+  @media (max-width: 640px) { .compare-grid { grid-template-columns: 1fr; } }
+  .compare-card {
+    background: var(--card);
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .compare-card.bad { border-color: #fca5a5; }
+  .compare-card.good { border-color: #6ee7b7; }
+  .compare-card .label {
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 10px;
+  }
+  .compare-card.bad .label { color: #dc2626; }
+  .compare-card.good .label { color: #059669; }
+  .flow {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin: 16px 0;
+    font-size: 0.9rem;
+  }
+  .flow-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 4px;
+  }
+  .flow-arrow { color: var(--accent); font-size: 1.2rem; flex-shrink: 0; width: 20px; text-align: center; margin-top: 2px; }
+  .flow-text { flex: 1; }
+  .flow-note { font-size: 0.82rem; color: var(--muted); margin-top: 2px; }
+  .toc {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin: 0 0 40px;
+  }
+  .toc-title { font-weight: 700; margin-bottom: 12px; color: var(--primary); }
+  .toc ul { list-style: none; padding: 0; }
+  .toc li { margin: 8px 0; }
+  .toc a { color: var(--accent2); text-decoration: none; font-size: 0.93rem; }
+  .toc a:hover { color: var(--accent); text-decoration: underline; }
+  .footer {
+    text-align: center;
+    padding: 32px;
+    color: var(--muted);
+    font-size: 0.82rem;
+    border-top: 1px solid var(--border);
+    margin-top: 24px;
+  }
+  .quote {
+    background: #f8fafc;
+    border-left: 4px solid var(--accent2);
+    padding: 14px 20px;
+    margin: 16px 0;
+    font-style: italic;
+    font-size: 0.92rem;
+    color: #334155;
+    border-radius: 0 8px 8px 0;
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-tag">JuiceFS Operator · ACS · 本地盘缓存</div>
+    <h1>JuiceFS Operator 在阿里云 ACS PPU 本地盘的实践与踩坑</h1>
+    <p class="subtitle">
+      分布式缓存组部署、volumeDevices vs volumeMounts 的根本矛盾、local-passthrough 的正确理解，以及最终可用方案。
+    </p>
+    <div class="hero-meta">
+      <span>日期 <strong>2026-07-22</strong></span>
+      <span>场景 <strong>ACS PPU + JuiceFS EE</strong></span>
+      <span>👁 <img src="https://hits.sh/jerrycaimin.github.io/juicefs-operator-acs-local-pvc.svg" alt="views" style="vertical-align:middle;margin-left:4px;"></span>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+  <div class="toc">
+    <div class="toc-title">📋 目录</div>
+    <ul>
+      <li><a href="#s1">① volumeDevices vs volumeMounts 是什么</a></li>
+      <li><a href="#s2">② Operator 默认调度 vs enableScheduling</a></li>
+      <li><a href="#s3">③ ACS local-passthrough 的根本矛盾</a></li>
+      <li><a href="#s4">④ 解决方案：用 Filesystem 模式 PVC + 完整 YAML</a></li>
+    </ul>
+  </div>
+
+  <!-- S1 -->
+  <div class="section" id="s1">
+    <h2><span class="num">1</span>volumeDevices vs volumeMounts 是什么</h2>
+
+    <p>Kubernetes 里 PVC 有两种完全不同的使用方式，取决于 PV 的 <code>volumeMode</code>：</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th></th>
+          <th><code>volumeMode: Filesystem</code></th>
+          <th><code>volumeMode: Block</code></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Pod 里使用方式</td>
+          <td><code>volumeMounts</code>（挂载为目录）</td>
+          <td><code>volumeDevices</code>（暴露为裸块设备）</td>
+        </tr>
+        <tr>
+          <td>容器看到什么</td>
+          <td><code>/mnt/cache</code>（可以 <code>ls</code>、<code>open()</code>）</td>
+          <td><code>/dev/xvdb</code>（裸设备，没有文件系统）</td>
+        </tr>
+        <tr>
+          <td>谁来格式化</td>
+          <td>PV 创建时 K8s 已格式化好</td>
+          <td><strong>容器自己处理</strong>，或应用直接 raw I/O</td>
+        </tr>
+        <tr>
+          <td>典型使用者</td>
+          <td>几乎所有应用、JuiceFS 缓存</td>
+          <td>数据库（PostgreSQL/MySQL 直写）、Ceph OSD</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Filesystem 模式的完整流程</h3>
+    <div class="flow">
+      <div class="flow-row"><div class="flow-arrow">①</div><div class="flow-text">ACS 格式化本地 NVMe 盘（ext4/xfs）<div class="flow-note">由 StorageClass provisioner 完成，用户无感知</div></div></div>
+      <div class="flow-row"><div class="flow-arrow">↓</div><div class="flow-text">创建 Local PV，带 <code>nodeAffinity</code> 绑定到该 Node<div class="flow-note">PV 只能被该 Node 上的 Pod 使用</div></div></div>
+      <div class="flow-row"><div class="flow-arrow">↓</div><div class="flow-text">PVC 绑定 PV，状态变为 <code>Bound</code></div></div>
+      <div class="flow-row"><div class="flow-arrow">↓</div><div class="flow-text">Pod 通过 <code>volumeMounts</code> 挂载 PVC<div class="flow-note">容器内得到 <code>/mnt/cache</code> 目录，可直接读写文件</div></div></div>
+    </div>
+
+    <h3>Block 模式（local-passthrough）的流程</h3>
+    <div class="flow">
+      <div class="flow-row"><div class="flow-arrow">①</div><div class="flow-text">ACS 将裸块设备直通给容器，<strong>不做任何格式化</strong></div></div>
+      <div class="flow-row"><div class="flow-arrow">↓</div><div class="flow-text">Pod 通过 <code>volumeDevices</code> 使用 PVC</div></div>
+      <div class="flow-row"><div class="flow-arrow">↓</div><div class="flow-text">容器内得到 <code>/dev/xvdb</code>，一个裸块设备</div></div>
+      <div class="flow-row"><div class="flow-arrow">↓</div><div class="flow-text"><strong>应用必须自己做 raw I/O 或先 mkfs + mount</strong><div class="flow-note">普通业务（AI 训练、Python 脚本）完全不知道怎么用裸块设备</div></div></div>
+    </div>
+
+    <div class="warn-box">
+      <strong>⚠️ 关键约束：</strong> Kubernetes 明确禁止同一个 volume 同时出现在 <code>volumeMounts</code> 和 <code>volumeDevices</code> 中。
+      Block 模式 PVC 只能用 <code>volumeDevices</code>，JuiceFS Operator 的 <code>cacheDirs</code> 只生成 <code>volumeMounts</code>，
+      二者<strong>根本无法共存</strong>。
+    </div>
+  </div>
+
+  <!-- S2 -->
+  <div class="section" id="s2">
+    <h2><span class="num">2</span>Operator 默认调度 vs enableScheduling</h2>
+
+    <p>这里有个很容易混淆的点：Operator 的两种调度模式行为完全不同。</p>
+
+    <h3>默认模式（不开 enableScheduling）</h3>
+    <p>Operator 自己实现了类似 DaemonSet 的逻辑，<strong>完全不走 K8s 调度器</strong>：</p>
+    <div class="flow">
+      <div class="flow-row"><div class="flow-arrow">→</div><div class="flow-text">扫描所有打了 <code>juicefs.io/cg-worker: "true"</code> 标签的 Node</div></div>
+      <div class="flow-row"><div class="flow-arrow">→</div><div class="flow-text">对每个 Node 创建一个 Worker Pod，直接指定 <code>nodeName</code></div></div>
+      <div class="flow-row"><div class="flow-arrow">→</div><div class="flow-text"><strong>天然一个 Node 一个 Worker</strong>，不需要反亲和性配置</div></div>
+    </div>
+    <p>对于 <code>type: HostPath</code> 的场景，默认模式完全够用，YAML 极简。</p>
+
+    <h3>enableScheduling: true 模式（v0.7.2+）</h3>
+    <p>调度权交给 K8s 标准调度器，好处是可以使用完整的亲和性规则（跨 zone 分布等），代价是：</p>
+    <ul>
+      <li>调度器默认不知道"一个 Node 只能一个缓存 Worker"，可能把多个 Worker 塞到同一台节点</li>
+      <li>必须<strong>手动配置 podAntiAffinity</strong> 才能保证每台 Node 最多一个 Worker</li>
+      <li>对于 Local PVC，调度器才能感知 PV 的 <code>nodeAffinity</code>，避免 Pod 被调度到没有对应 PVC 的节点</li>
+    </ul>
+
+    <div class="compare-grid">
+      <div class="compare-card good">
+        <div class="label">✅ HostPath 场景</div>
+        <p><strong>不需要</strong> <code>enableScheduling</code></p>
+        <p>默认模式天然一 Node 一 Worker，配置最简单</p>
+      </div>
+      <div class="compare-card bad">
+        <div class="label">⚠️ Local PVC 场景</div>
+        <p><strong>需要</strong> <code>enableScheduling: true</code></p>
+        <p>让调度器感知 PV 的 nodeAffinity，但随之要手写反亲和性规则</p>
+      </div>
+    </div>
+
+    <h3>反亲和性（podAntiAffinity）的含义</h3>
+    <p>
+      <code>podAntiAffinity</code> 是告诉调度器：<strong>我不想和同类 Pod 在一起</strong>。
+      加上 <code>topologyKey: kubernetes.io/hostname</code> 后，效果就是同一个缓存组的 Worker Pod 每台 Node 最多一个：
+    </p>
+    <pre><code><span class="c-blue">affinity</span>:
+  <span class="c-blue">podAntiAffinity</span>:
+    <span class="c-blue">requiredDuringSchedulingIgnoredDuringExecution</span>:   <span class="c-comment"># 硬性要求，不满足就不调度</span>
+      - labelSelector:
+          matchExpressions:
+            - key: juicefs.io/cache-group
+              operator: In
+              values: [my-cache-group]
+        topologyKey: <span class="c-yellow">"kubernetes.io/hostname"</span>   <span class="c-comment"># 以 Node 为粒度隔离</span></code></pre>
+  </div>
+
+  <!-- S3 -->
+  <div class="section" id="s3">
+    <h2><span class="num">3</span>ACS local-passthrough 的根本矛盾</h2>
+
+    <p>阿里云 ACS 提供了一种 <code>local-passthrough</code> StorageClass，将 PPU 本地盘以 Block 模式直通给 Pod。
+    这是为数据库等存储感知型应用设计的高性能方案，但对于 JuiceFS 场景存在根本性的矛盾。</p>
+
+    <div class="quote">
+      "就是说现在 ACS 提供的这个 PVC 是 local-passthrough（Block 模式），也就是业务 Pod 拿到的是一个 /dev/xvdb 而不是一个路径对吧，那就有点扯了，业务要一个 block device 干嘛呀，要一个路径挂载点呀。operator 是不支持 volumeDevices，也没必要，支持了用户也用不了，难道还给你格式化一下再用么 😅"
+    </div>
+
+    <div class="card danger">
+      <strong>根本矛盾：</strong>
+      <ul style="margin-top:10px">
+        <li><code>local-passthrough</code> 只支持 Block 模式 → 只能用 <code>volumeDevices</code></li>
+        <li>JuiceFS Operator 的 <code>cacheDirs</code> 自动生成 <code>volumeMounts</code></li>
+        <li>K8s 禁止同一 volume 同时出现在两者中 → <strong>直接报错，无法绕过</strong></li>
+      </ul>
+    </div>
+
+    <h3>为什么 AI 训练业务也不能直接用 Block PVC？</h3>
+    <p>普通的 AI 训练任务、Python 脚本的诉求是：<code>open("/data/train.parquet", "rb")</code>。
+    它们完全不知道、也不需要知道底层是什么磁盘。Block 设备必须先格式化才能有文件系统，而在容器里做 <code>mkfs</code> 需要特权模式，并且每次 Pod 重启都需要重新挂载，这不是一个合理的生产方案。</p>
+
+    <h3>正确的解决方向</h3>
+    <p>去问 ACS 提供本地盘 PVC 的团队，本地盘有两种暴露方式：</p>
+
+    <table>
+      <thead>
+        <tr><th>模式</th><th>volumeMode</th><th>容器得到什么</th><th>适用场景</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="badge badge-red">Block 模式</span> local-passthrough</td>
+          <td><code>Block</code></td>
+          <td><code>/dev/xvdb</code> 裸块设备</td>
+          <td>数据库 direct I/O、Ceph</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-green">Filesystem 模式</span> 常规本地盘</td>
+          <td><code>Filesystem</code></td>
+          <td><code>/mnt/cache</code> 目录</td>
+          <td>AI 训练、JuiceFS 缓存、所有常规应用 ✅</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="tip-box">
+      <strong>💡 向 ACS 团队要求：</strong> 提供一个类似 <code>alicloud-local-disk</code> / <code>alicloud-local-ssd</code>
+      这类 <strong>Filesystem 模式</strong>的 StorageClass，或者直接提供 <code>volumeMode: Filesystem</code> 的 PVC。
+    </div>
+
+    <h3>备选方案：直接用 HostPath</h3>
+    <p>
+      如果 ACS 在宿主机上也将本地盘挂载到了某个路径（如 <code>/mnt/nvme0</code>），
+      可以完全绕开 PVC 问题，直接用 <code>type: HostPath</code>，这也是最简单稳定的方案：
+    </p>
+    <pre><code><span class="c-blue">cacheDirs</span>:
+  - type: <span class="c-green">HostPath</span>
+    path: <span class="c-yellow">/mnt/nvme0</span>   <span class="c-comment"># 宿主机上已格式化挂载好的本地盘路径</span></code></pre>
+    <pre><code><span class="c-comment"># 确认宿主机上的挂载点</span>
+df -h | grep nvme
+lsblk -o NAME,MOUNTPOINT,SIZE | grep -v loop</code></pre>
+    <p>用 HostPath 时不需要 <code>enableScheduling</code>，Operator 默认行为就是一个 Node 一个 Worker，配置最简洁。</p>
+  </div>
+
+  <!-- S4 -->
+  <div class="section" id="s4">
+    <h2><span class="num">4</span>Filesystem 模式 PVC + 完整 YAML</h2>
+
+    <p>假设 ACS 提供了 Filesystem 模式的本地盘 StorageClass（如 <code>alicloud-local-ssd</code>），
+    此时 PVC 可以正常被 Operator 的 <code>cacheDirs</code> 使用。</p>
+
+    <div class="warn-box">
+      <strong>⚠️ 仍然需要 enableScheduling: true：</strong>
+      即使是 Filesystem 模式，Local PV 上依然有 <code>nodeAffinity</code>（只能被该 Node 的 Pod 使用）。
+      不开 <code>enableScheduling</code> 时 Operator 自己的调度逻辑不感知这个约束，可能导致调度失败。
+      开启后需配合反亲和性，保证每台 Node 最多一个 Worker。
+    </div>
+
+    <h3>完整 YAML 示例</h3>
+    <pre><code><span class="c-comment">## 1. JuiceFS 认证 Secret</span>
+apiVersion: v1
+kind: Secret
+metadata:
+  name: juicefs-secret
+  namespace: juicefs-cache-group
+type: Opaque
+stringData:
+  name: <span class="c-yellow">your-volume-name</span>
+  token: <span class="c-yellow">your-token</span>
+  access-key: <span class="c-yellow">your-ak</span>
+  secret-key: <span class="c-yellow">your-sk</span>
+  <span class="c-comment"># 私有化部署加这行，公有云可删</span>
+  <span class="c-comment"># envs: '{"BASE_URL": "http://&lt;console-ip&gt;:8080/static"}'</span>
+
+---
+<span class="c-comment">## 2. CacheGroup 主体</span>
+apiVersion: juicefs.io/v1
+kind: CacheGroup
+metadata:
+  name: ppu-cache-group
+  namespace: juicefs-cache-group
+spec:
+  secretRef:
+    name: juicefs-secret
+
+  <span class="c-comment"># 自定义缓存组名，不填默认是 ${namespace}-${name}</span>
+  cacheGroup: <span class="c-yellow">ppu-cache-group</span>
+
+  <span class="c-comment"># 开启 K8s 标准调度器 —— Local PVC 必须开启（让调度器感知 PV 的 nodeAffinity）</span>
+  enableScheduling: <span class="c-green">true</span>
+
+  <span class="c-comment"># 节点缩容时先迁移缓存再删节点</span>
+  waitingDeletedMaxDuration: 1h
+
+  <span class="c-comment"># 删除节点时清理本地缓存</span>
+  cleanCache: <span class="c-green">true</span>
+
+  worker:
+    template:
+      <span class="c-comment"># 只在打了这个标签的节点上部署 Worker</span>
+      nodeSelector:
+        juicefs.io/cg-worker: <span class="c-yellow">"true"</span>
+
+      image: <span class="c-yellow">juicedata/mount:ee-5.1.1-1faf43b</span>   <span class="c-comment"># 换成实际版本</span>
+
+      <span class="c-comment"># 反亲和性：保证每台 Node 最多一个 Worker Pod</span>
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: juicefs.io/cache-group
+                    operator: In
+                    values:
+                      - <span class="c-yellow">ppu-cache-group</span>   <span class="c-comment"># 与 spec.cacheGroup 保持一致</span>
+              topologyKey: <span class="c-yellow">"kubernetes.io/hostname"</span>
+
+      opts:
+        - cache-size=<span class="c-yellow">204800</span>         <span class="c-comment"># 200GB，按实际盘大小调整</span>
+        - free-space-ratio=<span class="c-yellow">0.05</span>
+        - group-weight=<span class="c-yellow">100</span>
+        - buffer-size=<span class="c-yellow">4096</span>
+
+      <span class="c-comment"># 使用 Filesystem 模式的本地盘 PVC</span>
+      cacheDirs:
+        - type: <span class="c-green">PVC</span>
+          name: <span class="c-yellow">local-ssd-pvc-node-ppu-01</span>   <span class="c-comment"># 该节点对应的 PVC 名</span>
+
+      resources:
+        requests:
+          cpu: 500m
+          memory: 512Mi
+        limits:
+          cpu: <span class="c-yellow">"4"</span>
+          memory: <span class="c-yellow">4Gi</span>
+
+    <span class="c-comment"># 不同节点可能 PVC 名字不同，用 overwrite 为每个节点单独指定</span>
+    overwrite:
+      - nodes:
+          - <span class="c-yellow">node-ppu-01</span>
+        cacheDirs:
+          - type: PVC
+            name: <span class="c-yellow">local-ssd-pvc-node-ppu-01</span>
+      - nodes:
+          - <span class="c-yellow">node-ppu-02</span>
+        cacheDirs:
+          - type: PVC
+            name: <span class="c-yellow">local-ssd-pvc-node-ppu-02</span>
+      - nodes:
+          - <span class="c-yellow">node-ppu-03</span>
+        cacheDirs:
+          - type: PVC
+            name: <span class="c-yellow">local-ssd-pvc-node-ppu-03</span>
+
+---
+<span class="c-comment">## 3. 应用侧 StorageClass —— 挂载时加入缓存组</span>
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: juicefs-sc
+mountOptions:
+  - cache-group=<span class="c-yellow">ppu-cache-group</span>
+  - no-sharing   <span class="c-comment"># 业务客户端加入缓存组但不参与构建，避免频繁创销影响命中率</span></code></pre>
+
+    <h3>部署命令</h3>
+    <pre><code><span class="c-comment"># 1. 给 PPU 节点打标签</span>
+kubectl label node node-ppu-01 node-ppu-02 node-ppu-03 juicefs.io/cg-worker=true
+
+<span class="c-comment"># 2. 创建 namespace</span>
+kubectl create namespace juicefs-cache-group
+
+<span class="c-comment"># 3. 应用配置</span>
+kubectl apply -f juicefs-cache-group.yaml
+
+<span class="c-comment"># 4. 查看状态（等待 PHASE=Ready）</span>
+kubectl get cachegroups -n juicefs-cache-group -w
+
+<span class="c-comment"># 5. 确认每台 Node 都有一个 Worker Pod</span>
+kubectl get pods -n juicefs-cache-group -o wide
+
+<span class="c-comment"># 确认 PVC 名字（通过 nodeAffinity 反查）</span>
+kubectl get pv -o json | python3 -c "
+import json, sys
+pvs = json.load(sys.stdin)['items']
+for pv in pvs:
+    na = pv.get('spec', {}).get('nodeAffinity', {})
+    terms = na.get('required', {}).get('nodeSelectorTerms', [{}])
+    node = ''
+    for t in terms:
+        for e in t.get('matchExpressions', []):
+            if e['key'] == 'kubernetes.io/hostname':
+                node = e['values'][0]
+    claim = pv.get('spec', {}).get('claimRef', {}).get('name', '')
+    if claim:
+        print(f'Node: {node:30s}  PVC: {claim}')
+"</code></pre>
+
+    <div class="success-box">
+      <strong>✅ 如果嫌麻烦，用 HostPath 最简单：</strong> 如果 ACS 宿主机上本地盘已有挂载点，
+      完全不需要 <code>enableScheduling</code>，也不需要反亲和性，直接
+      <code>cacheDirs: [{type: HostPath, path: /mnt/nvme0}]</code>，Operator 默认就是一 Node 一 Worker。
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">
+  JuiceFS Operator · ACS PPU 本地盘实践 · 2026-07-22 ·
+  <a href="index.html" style="color:var(--accent2)">← 返回首页</a>
+</div>
+
+</body>
+</html>
