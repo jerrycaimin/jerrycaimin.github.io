@@ -398,6 +398,23 @@
       <strong>关键观察：</strong>两行日志相差仅 <strong>30 微秒</strong>，来自同一进程（PID 1225513），
       均是同一次 <code>compact()</code> 调用产生的——<strong>不是普通读，是 Compaction 在读碎片时失败了</strong>。
     </div>
+
+    <h3>正常 case：slice 积累到约 100 个后自动合并</h3>
+    <p>
+      当追加写速率不是极端快时，meta server 在 slice 数累积到约 100 个时就会触发自动 compact，
+      将所有碎片合并成一个大块。下面的录屏演示了这个正常的合并过程（约 4 分钟积累 → 自动合并 → 文件可正常读取，不会 hang）：
+    </p>
+    <div style="margin:16px 0;border-radius:10px;overflow:hidden;background:#000;box-shadow:0 4px 20px rgba(0,0,0,0.15);">
+      <video controls style="width:100%;display:block;max-height:520px;" preload="metadata">
+        <source src="normal-compact-demo.mp4" type="video/mp4">
+        您的浏览器不支持 video 标签，请升级浏览器后查看。
+      </video>
+    </div>
+    <p style="color:var(--muted);font-size:0.85rem;margin-top:4px;">
+      ↑ 演示：slice 数从 0 增长到 ~100，meta server 触发 compact，合并为单个大块，整个过程透明无感知。
+      本文分析的问题是在 <strong>追加写速率极快（每秒数百次 flush）</strong> 时，slice 数以远超 compact 速度积累，
+      触发并发 compact job 竞争的边界情况。
+    </p>
   </div>
 
   <!-- ====== S1 根因 ====== -->
