@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lance 做湖 JuiceFS 做路：智驾场景 Lance + JuiceFS 技术调研纪要（2026-08）</title>
+<style>
+  :root {
+    --primary: #1a1a2e;
+    --accent: #e94560;
+    --accent2: #0f3460;
+    --bg: #f8f9fa;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --code-bg: #1e1e2e;
+    --code-fg: #cdd6f4;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --success: #10b981;
+    --info: #3b82f6;
+    --muted: #64748b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: #1e293b;
+    line-height: 1.7;
+  }
+
+  /* ── Hero ── */
+  .hero {
+    background: linear-gradient(135deg, #0a0a1a 0%, #1a1a2e 40%, #0f3460 100%);
+    color: white;
+    padding: 60px 40px 50px;
+  }
+  .hero-inner { max-width: 960px; margin: 0 auto; }
+  .hero-tag {
+    display: inline-block;
+    background: rgba(233,69,96,0.2);
+    color: #f87171;
+    border: 1px solid rgba(233,69,96,0.4);
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+  .hero h1 {
+    font-size: 2.1rem;
+    font-weight: 800;
+    line-height: 1.25;
+    margin-bottom: 16px;
+  }
+  .hero p { color: #94a3b8; font-size: 1rem; max-width: 760px; }
+  .hero-meta {
+    margin-top: 28px;
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .hero-meta span {
+    color: #64748b;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .hero-meta strong { color: #e2e8f0; }
+
+  /* ── Layout ── */
+  .container { max-width: 960px; margin: 0 auto; padding: 48px 24px; }
+  .section { margin-bottom: 56px; }
+  .section-title {
+    font-size: 1.45rem;
+    font-weight: 700;
+    color: var(--primary);
+    border-left: 4px solid var(--accent);
+    padding-left: 14px;
+    margin-bottom: 24px;
+  }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px 32px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.05);
+  }
+  .card h3 {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin-bottom: 12px;
+    color: #1e293b;
+  }
+  .card h4 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin: 16px 0 8px;
+    color: #334155;
+  }
+  .card p, .card li { color: #475569; font-size: 0.96rem; }
+  .card ul { padding-left: 20px; }
+  .card li { margin-bottom: 6px; }
+  .card p + p { margin-top: 10px; }
+
+  /* ── Two-col grid ── */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media(max-width:640px){ .grid2 { grid-template-columns: 1fr; } }
+
+  /* ── Alert boxes ── */
+  .alert {
+    border-radius: 10px;
+    padding: 18px 22px;
+    margin-bottom: 20px;
+    font-size: 0.95rem;
+    line-height: 1.65;
+    border-left: 4px solid;
+  }
+  .alert.danger { background: #fef2f2; border-color: var(--danger); color: #7f1d1d; }
+  .alert.warn   { background: #fffbeb; border-color: var(--warn);   color: #78350f; }
+  .alert.info   { background: #eff6ff; border-color: var(--info);   color: #1e3a5f; }
+  .alert.ok     { background: #f0fdf4; border-color: var(--success); color: #14532d; }
+  .alert strong { font-weight: 700; display: block; margin-bottom: 6px; }
+
+  /* ── Code ── */
+  pre {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    border-radius: 10px;
+    padding: 20px 24px;
+    overflow-x: auto;
+    font-size: 0.88rem;
+    line-height: 1.65;
+    margin: 16px 0;
+    font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  code {
+    background: #f1f5f9;
+    color: #e94560;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.88em;
+    font-family: "JetBrains Mono", Consolas, monospace;
+  }
+  pre code { background: none; color: inherit; padding: 0; }
+
+  /* ── Table ── */
+  .tbl-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+  th {
+    background: #1e293b;
+    color: #f1f5f9;
+    font-weight: 600;
+    text-align: left;
+    padding: 12px 16px;
+  }
+  td { padding: 10px 16px; border-bottom: 1px solid #e2e8f0; vertical-align: top; color: #475569; }
+  tr:nth-child(even) td { background: #f8fafc; }
+  td.win  { background: #f0fdf4; color: #166534; font-weight: 600; }
+  td.lose { background: #fef2f2; color: #991b1b; }
+
+  /* ── Flow diagram ── */
+  .flow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    align-items: stretch;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+  .flow-step {
+    flex: 1;
+    min-width: 130px;
+    padding: 20px 14px;
+    text-align: center;
+    font-size: 0.85rem;
+    border-right: 1px solid var(--border);
+  }
+  .flow-step:last-child { border-right: none; }
+  .flow-step .fs-num {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--accent2);
+    color: white;
+    font-weight: 700;
+    font-size: 0.8rem;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 10px;
+  }
+  .flow-step .fs-label { font-weight: 600; color: #1e293b; margin-bottom: 4px; }
+  .flow-step .fs-sub { color: var(--muted); font-size: 0.78rem; line-height: 1.5; }
+  .flow-step.hot .fs-num { background: var(--danger); }
+  .flow-step.hot { background: #fff1f2; }
+
+  /* ── Callout quote ── */
+  blockquote {
+    border-left: 4px solid var(--accent);
+    background: #fff7f7;
+    padding: 14px 20px;
+    margin: 16px 0;
+    border-radius: 0 8px 8px 0;
+    font-size: 0.94rem;
+    color: #4b1c2a;
+    font-style: italic;
+  }
+  blockquote cite { display: block; margin-top: 8px; font-style: normal; font-size: 0.82rem; color: var(--muted); }
+
+  /* ── Tag pills ── */
+  .tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .tag {
+    background: #e0f2fe;
+    color: #0369a1;
+    border-radius: 20px;
+    padding: 3px 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+  }
+  .tag.orange { background: #fff7ed; color: #c2410c; }
+  .tag.green  { background: #f0fdf4; color: #15803d; }
+  .tag.purple { background: #f5f3ff; color: #6d28d9; }
+  .tag.red    { background: #fef2f2; color: #b91c1c; }
+
+  /* ── Summary box at top ── */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 48px;
+  }
+  @media(max-width:640px){ .summary-grid { grid-template-columns: 1fr 1fr; } }
+  .sum-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,.04);
+  }
+  .sum-card .num { font-size: 2rem; font-weight: 800; color: var(--accent); line-height: 1; }
+  .sum-card .lbl { font-size: 0.8rem; color: var(--muted); margin-top: 6px; }
+
+  /* ── vs banner ── */
+  .vs-banner {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 20px;
+    border: 1px solid var(--border);
+  }
+  .vs-left, .vs-right { flex: 1; padding: 20px 24px; }
+  .vs-left { background: #eff6ff; }
+  .vs-right { background: #fef2f2; }
+  .vs-mid {
+    width: 48px; min-width: 48px;
+    background: #1e293b;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 1.1rem;
+    align-self: stretch;
+  }
+  .vs-title { font-weight: 700; font-size: 1.05rem; margin-bottom: 8px; }
+  .vs-left .vs-title { color: #1d4ed8; }
+  .vs-right .vs-title { color: #b91c1c; }
+  .vs-left li, .vs-right li { font-size: 0.88rem; color: #475569; margin-bottom: 4px; }
+  .vs-left ul, .vs-right ul { padding-left: 18px; }
+</style>
+</head>
+<body>
+
+<!-- ── Hero ── -->
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-tag">技术调研纪要</div>
+    <h1>Lance 做湖，JuiceFS 做路<br>智驾场景 Lance + JuiceFS 应用调研</h1>
+    <p>
+      来自某头部智驾公司的实践分享：在数据生产与模型训练场景中，为什么同时需要 Lance 列式数据湖与 JuiceFS
+      分布式文件系统，以及为何选择 JuiceFS 而非 Alluxio、选择 Lance 而非 LMDB。
+    </p>
+    <div class="hero-meta">
+      <span>📅 <strong>2026-08-26</strong></span>
+      <span>🏢 <strong>某头部智驾公司</strong></span>
+      <span>🎯 <strong>数据生产 · 模型训练 · 多云场景</strong></span>
+      <span>👁 <img src="https://hits.sh/jerrycaimin.github.io/lance-juicefs-autonomous-driving-2026.svg" alt="views" style="vertical-align:middle;margin-left:4px;"></span>
+    </div>
+  </div>
+</div>
+
+<!-- ── Main ── -->
+<div class="container">
+
+  <!-- 核心结论摘要 -->
+  <div class="summary-grid">
+    <div class="sum-card">
+      <div class="num">95%</div>
+      <div class="lbl">标注列读取中<br>实际只需 5% 的列</div>
+    </div>
+    <div class="sum-card">
+      <div class="num">百万</div>
+      <div class="lbl">训练场景 QPS 峰值<br>绝大多数是无效 lookup</div>
+    </div>
+    <div class="sum-card">
+      <div class="num">50亿+</div>
+      <div class="lbl">Lance 已 POC 验证行数<br>目标千亿行</div>
+    </div>
+    <div class="sum-card">
+      <div class="num">多云</div>
+      <div class="lbl">核心驱动力<br>跨 IDC 数据分布统一</div>
+    </div>
+  </div>
+
+  <!-- ── Section 1 ── -->
+  <div class="section">
+    <div class="section-title">一、为什么用了 Lance 还要用 JuiceFS</div>
+
+    <div class="alert info">
+      <strong>背景</strong>
+      Lance 格式本身可以直接落在 S3 对象存储上。那为什么要在中间加一层 JuiceFS？
+      答案不是"因为 Lance 需要"，而是"因为数据分布问题和 GPU 空转问题，没有 JuiceFS 解决不了"。
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h3>🌐 多云 / 多 IDC 数据分布</h3>
+        <p>
+          数据跨阿里云、腾讯云、火山云及自有 IDC 分布，有时甚至分布在不同城市。
+          S3 只能走 TCP，在跨 IDC 场景下延迟高、毛刺严重；GPU 节点之间走 RDMA，
+          但存储网络与计算网络不在同一平面，需要经过多层交换机。
+        </p>
+        <div class="tags">
+          <span class="tag red">跨 IDC 延迟</span>
+          <span class="tag orange">TCP vs RDMA</span>
+          <span class="tag">S3 毛刺</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>🔥 提前预热，消灭 GPU 空转</h3>
+        <p>
+          GPU 任务启动时若从远端实时拉取数据，延迟可达数十秒，导致 GPU 空转。
+          GPU 空转几十秒的成本远高于存储加速投入。
+        </p>
+        <p>
+          训练集（trainlist）已知要读哪些数据、哪些帧，JuiceFS Cache Group 可将
+          GPU 本地 NVMe 盘池化，在任务启动前将数据预热到本地，实现近零等待，
+          甚至节省高性能共享存储的带宽开销。
+        </p>
+        <div class="tags">
+          <span class="tag green">Cache Group 预热</span>
+          <span class="tag green">NVMe 池化</span>
+          <span class="tag orange">trainlist 已知读集</span>
+        </div>
+      </div>
+    </div>
+
+    <blockquote>
+      "你可以查一下，像腾讯云，它的 GPU 之间走 RDMA，但存储面跟算法那边的网络不是一个网络，
+      经过很多轮交换机……S3 只能 TCP，非常慢，一旦抖动起来，性能毛刺非常厉害，天天被投诉。"
+      <cite>—— 客户方原话</cite>
+    </blockquote>
+  </div>
+
+  <!-- ── Section 2 ── -->
+  <div class="section">
+    <div class="section-title">二、数据生产场景：有效 IO 比极低</div>
+
+    <div class="alert warn">
+      <strong>核心问题</strong>
+      训练/数据生产场景中 QPS 可达百万～千万级，但其中绝大部分是
+      <code>lookup</code> 和 <code>getattr</code> 请求，真正有效的读 IO 占比极低。
+      流量跑满，但 epoch 速度没有提升 = 数据 IO 出了问题。
+    </div>
+
+    <!-- IO 放大路径 -->
+    <div class="flow">
+      <div class="flow-step">
+        <div class="fs-num">1</div>
+        <div class="fs-label">训练进程</div>
+        <div class="fs-sub">按帧读取标注数据<br>每帧有数百列属性</div>
+      </div>
+      <div class="flow-step hot">
+        <div class="fs-num">2</div>
+        <div class="fs-label">无列裁剪</div>
+        <div class="fs-sub">整行全量读出<br>读放大 20×～100×</div>
+      </div>
+      <div class="flow-step hot">
+        <div class="fs-num">3</div>
+        <div class="fs-label">百万级 QPS</div>
+        <div class="fs-sub">绝大多数是<br>lookup / getattr</div>
+      </div>
+      <div class="flow-step hot">
+        <div class="fs-num">4</div>
+        <div class="fs-label">流量打满</div>
+        <div class="fs-sub">看起来 IO 满载<br>实际训练速度很低</div>
+      </div>
+      <div class="flow-step">
+        <div class="fs-num">5</div>
+        <div class="fs-label">JuiceFS + Lance</div>
+        <div class="fs-sub">客户端列裁剪<br>有效 IO 比显著提升</div>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h3>📊 数据生产 vs 训练 IO 对比</h3>
+        <p>
+          数据生产（数据闭环）是<strong>顺序读高并发</strong>场景，IO 强度远高于训练。
+          训练是点查场景，但数据生产对吞吐要求更极致。
+          两个场景都需要 JuiceFS，理由不同但同等重要。
+        </p>
+        <div class="tags">
+          <span class="tag red">数据生产：顺序读高并发</span>
+          <span class="tag orange">训练：点查 + 预热</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>⚙️ JuiceFS 富客户端的价值</h3>
+        <ul>
+          <li><strong>clip 不打散</strong>：同一份 clip 数据保持局部性，clip 间可乱序，clip 内不拆散</li>
+          <li><strong>业务 SDK 封装</strong>：数据校验、QPS 限流、倾斜检测均在客户端层实现</li>
+          <li><strong>后端可控</strong>：TiKV 触发流控时，可通过客户端限速保护集群</li>
+          <li><strong>非标玩法</strong>：Python SDK、OpenZFS 管理面都可以自己搓</li>
+        </ul>
+      </div>
+    </div>
+
+    <blockquote>
+      "因为用 JuiceFS，它是一个重客户端的工具，我所有的很多非标、或者说很多业务属性的东西，
+      都在客户端来做完。比方说我们在训练里面有 clip 概念——你不希望一份数据里面的东西拆散，
+      但是可以 clips 之间打散……不在客户端做，就没有任何地方可以帮你做这个事情。"
+      <cite>—— 客户方原话</cite>
+    </blockquote>
+  </div>
+
+  <!-- ── Section 3 ── -->
+  <div class="section">
+    <div class="section-title">三、为什么选 Lance 列式存储，而非 LMDB 行式存储</div>
+
+    <div class="vs-banner">
+      <div class="vs-left">
+        <div class="vs-title">✅ Lance（列式）</div>
+        <ul>
+          <li>列裁剪，只读所需列（5%～10%）</li>
+          <li>同列类型一致，压缩比极高</li>
+          <li>原生向量索引（HNSW 等）</li>
+          <li>标量 + 向量联合检索</li>
+          <li>非侵入式元数据，不改原始文件</li>
+          <li>列级热更新，不需重写全表</li>
+        </ul>
+      </div>
+      <div class="vs-mid">VS</div>
+      <div class="vs-right">
+        <div class="vs-title">❌ LMDB（行式 KV）</div>
+        <ul>
+          <li>读一行 = 读所有列，读放大严重</li>
+          <li>行式压缩效率低（混合类型）</li>
+          <li>无原生向量检索能力</li>
+          <li>仅标量点查，无相似度搜索</li>
+          <li>数据打包侵入原始格式</li>
+          <li>改一列属性需重写全量文件</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h3>📐 标量检索</h3>
+        <p>
+          每一帧都有离散型标注属性：天气（晴/雨/雪）、光照、场景类型等，用 <code>int</code>/<code>bool</code>/<code>long</code> 表示。
+          列式存储下同列类型一致，压缩比极致——同等数据量可节省一半以上存储。
+        </p>
+        <p>例：<code>weather_type</code> 列全是 0/1/2 整数，列式压缩后几乎不占空间；行式则每行都要携带完整 JSON。</p>
+        <div class="tags">
+          <span class="tag green">压缩比 2x～5x+</span>
+          <span class="tag">精确过滤</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>🔍 向量检索（embedding 相似度）</h3>
+        <p>
+          大模型对每一帧提取 embedding（128/256/768 维），记录该帧与各类场景的相似度。
+          向量检索即"模糊版标量查询"，用于业务世界观升级后的模糊 double-check：
+          例如从"雨天/非雨天"细化到"大雨/中雨/太阳雨"时，用向量召回辅助人工复核。
+        </p>
+        <div class="tags">
+          <span class="tag purple">embedding 相似度</span>
+          <span class="tag purple">HNSW 索引</span>
+          <span class="tag">标量 + 向量联合</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>🏗️ Lance vs LanceDB：关系厘清</h3>
+      <p>
+        <strong>Lance</strong>：一种列式数据格式（类比 Parquet），可存在本地磁盘或对象存储上。
+      </p>
+      <p>
+        <strong>LanceDB</strong>：基于 Lance 格式的客户端 SDK 层，提供 Python/Java/Go 包及检索引擎能力（类比 Spark 之于 Parquet）。
+        商业版支持上万列、服务端检索引擎；社区版已支持 50 亿行 POC，目标千亿行。
+      </p>
+      <p>
+        <strong>推荐客户端</strong>：算法侧<strong>极度推荐 pylance（Python SDK）</strong>，Rust 包难以推动，Go 包内部工具侧用。
+      </p>
+      <div class="tags">
+        <span class="tag green">pylance 极度推荐</span>
+        <span class="tag">fragment/segment ≈ JuiceFS chunk</span>
+        <span class="tag orange">上万列（商业版）</span>
+        <span class="tag purple">千亿行目标</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>📦 非侵入式元数据设计</h3>
+      <p>
+        Lance 不改写原始文件（mcap、点云、PNG 等），只在数据上追加一层元数据记录。
+        原始数据可通过 URL 软链接形式引用对象存储路径，Lance 文件本体保持轻量。
+      </p>
+      <p>
+        真正频繁改写的是标注数据——今天把雨天分类细化，只需修改对应列，
+        无需重写全量数据。这是选择列式的另一个关键原因。
+      </p>
+    </div>
+  </div>
+
+  <!-- ── Section 4 ── -->
+  <div class="section">
+    <div class="section-title">四、为什么选 JuiceFS 而非 Alluxio</div>
+
+    <div class="alert danger">
+      <strong>Alluxio 的核心缺陷（客户实测结论）</strong>
+      Alluxio 是一个纯加速层，无法做到"用户主动控制预热和淘汰"。
+      在大规模训练和数据生产场景，这是致命短板。
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>对比维度</th>
+            <th>JuiceFS</th>
+            <th>Alluxio（社区版）</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>产品定位</strong></td>
+            <td class="win">控制面 + 完整文件系统，可管控后端存储</td>
+            <td class="lose">纯缓存加速层，无后端管控能力</td>
+          </tr>
+          <tr>
+            <td><strong>主动预热</strong></td>
+            <td class="win">用户自定义预热时机和内容（trainlist 驱动）</td>
+            <td class="lose">被动预热，读到才加载，时机不可控</td>
+          </tr>
+          <tr>
+            <td><strong>缓存淘汰（evict）</strong></td>
+            <td class="win">支持主动 evict：数据跑完即清理，腾出空间</td>
+            <td class="lose">仅 LRU，缓存只增不减，容量无上界</td>
+          </tr>
+          <tr>
+            <td><strong>非 K8s 场景</strong></td>
+            <td class="win">支持裸金属、单机、多种部署形式</td>
+            <td class="lose">主要面向 K8s 容器层，非容器场景能力弱</td>
+          </tr>
+          <tr>
+            <td><strong>业务 SDK 封装</strong></td>
+            <td class="win">富客户端，可在挂载点上封装业务 SDK</td>
+            <td class="lose">无法暴露给算法层定制 SDK</td>
+          </tr>
+          <tr>
+            <td><strong>QoS / 流量治理</strong></td>
+            <td class="win">客户端级、token 级 QoS；可在流控时限速保护 TiKV</td>
+            <td class="lose">无法感知后端状态，流控失效时无保护</td>
+          </tr>
+          <tr>
+            <td><strong>POSIX 语义完整性</strong></td>
+            <td class="win">完整支持 atime/mtime 等标准语义</td>
+            <td class="lose">不完整，上层业务难以依赖标准语义</td>
+          </tr>
+          <tr>
+            <td><strong>横向管理面</strong></td>
+            <td class="win">可作为多套存储后端的统一控制面</td>
+            <td class="lose">无横向管控能力</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h3>⚡ Alluxio 的 evict 问题</h3>
+        <p>
+          Alluxio 依赖 LRU 被动淘汰——缓存满了才触发，告诉你"要加机器"。
+          但训练任务的数据是有生命周期的：这一轮跑完的数据下一轮不会再用，
+          应该<strong>立即主动清理</strong>。
+        </p>
+        <p>
+          如果无法主动 evict，缓存层会持续膨胀，最终成为运维负担。
+        </p>
+      </div>
+      <div class="card">
+        <h3>🏗️ JuiceFS 作为控制面的价值</h3>
+        <p>
+          JuiceFS 不只是"加速"，它是一个具备后端感知能力的控制面：
+        </p>
+        <ul>
+          <li>感知 TiKV 流控信号，客户端主动降速</li>
+          <li>在挂载点上架一层业务 SDK（数据分布检测、校验、限流）</li>
+          <li>跨多套后端统一纳管（替代或补充 Alluxio 能力）</li>
+          <li>QoS 精细化：单客户端级，企业版支持 token 级批量限速</li>
+        </ul>
+      </div>
+    </div>
+
+    <blockquote>
+      "站在我的角度，JuiceFS 是一个控制面的东西，Alluxio 只是一个加速层。
+      Alluxio 没办法穿透给算法层，因为它不是一个完整的客户端对接后端的产品，
+      控制不了后端……我们用 JuiceFS 可以做那些 OpenZFS 的各种各样的管理面，自己搓都可以。"
+      <cite>—— 客户方原话</cite>
+    </blockquote>
+  </div>
+
+  <!-- ── Section 5：整体架构 ── -->
+  <div class="section">
+    <div class="section-title">五、整体架构：Lance 做湖，JuiceFS 做路</div>
+
+    <div class="card">
+      <h3>架构层次</h3>
+      <pre>
+┌──────────────────────────────────────────────────────────────────┐
+│                         算法 / 训练层                              │
+│   trainlist 驱动预热 │ Python pylance SDK │ clip 局部性保证        │
+└───────────────────────────────┬──────────────────────────────────┘
+                                │ POSIX / FUSE
+┌───────────────────────────────▼──────────────────────────────────┐
+│                      JuiceFS（控制面）                             │
+│  ┌────────────────┐  ┌────────────────┐  ┌───────────────────┐   │
+│  │  Cache Group   │  │  客户端 QoS    │  │  主动预热 / evict  │   │
+│  │  NVMe 池化     │  │  clip 局部性   │  │  业务 SDK 封装     │   │
+│  └────────────────┘  └────────────────┘  └───────────────────┘   │
+└───────────────────────────────┬──────────────────────────────────┘
+                                │ 统一访问
+        ┌───────────────────────┴────────────────────┐
+        │                                            │
+┌───────▼──────────┐                    ┌───────────▼───────────┐
+│   Lance 数据湖    │                    │   原始数据（对象存储）  │
+│  标注列式数据     │                    │  mcap / 点云 / PNG    │
+│  标量 + 向量索引  │ ←── 元数据软链接 ──│  阿里云 / 腾讯云 / IDC │
+│  fragment 切片   │                    │  S3 接口              │
+└──────────────────┘                    └───────────────────────┘</pre>
+      <div class="tags">
+        <span class="tag green">Lance：数据湖格式层</span>
+        <span class="tag">JuiceFS：统一访问 + 加速层</span>
+        <span class="tag orange">多云统一纳管</span>
+      </div>
+    </div>
+
+    <div class="alert ok">
+      <strong>核心结论</strong>
+      Lance 解决"<strong>如何高效存储和检索多模态标注数据</strong>"（列裁剪、标量+向量联合索引、非侵入元数据）；
+      JuiceFS 解决"<strong>数据在哪里、怎么快速拿到</strong>"（多云统一、主动预热、GPU 空转消除、富客户端控制）。
+      两者不是竞争关系，而是互补的不同层次。
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
