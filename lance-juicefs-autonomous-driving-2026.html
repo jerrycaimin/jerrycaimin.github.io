@@ -632,34 +632,231 @@
     </blockquote>
   </div>
 
-  <!-- ── Section 5：整体架构 ── -->
+  <!-- ── Section 5：实战案例 ── -->
   <div class="section">
-    <div class="section-title">五、整体架构：Lance 做湖，JuiceFS 做路</div>
+    <div class="section-title">五、实战案例：数据闭环与模型训练的真实做法</div>
+
+    <div class="alert info">
+      <strong>说明</strong>
+      以下内容来自与某头部智驾公司技术负责人的深度访谈，还原他们<strong>实际落地</strong>的 Lance + JuiceFS 工程实践，非泛化描述。
+    </div>
+
+    <!-- 5.1 数据闭环 -->
+    <div class="section-title" style="font-size:1.1rem;border-color:#3b82f6;margin-top:0;">5.1&nbsp; 数据闭环（数据生产）</div>
+
+    <div class="card">
+      <h3>🚗 原始数据从哪来，怎么存</h3>
+      <p>
+        车辆采集的原始数据包括 mcap 文件（ROS 消息捕获）、激光雷达点云（.pcd）、摄像头 PNG 帧，
+        存放在阿里云 OSS / 腾讯云 COS / 自有 IDC 的对象存储中。<strong>原始文件本身不被修改。</strong>
+      </p>
+      <p>
+        JuiceFS 将多云/多 IDC 的对象存储统一挂载为同一个 POSIX 目录树，
+        标注工具链只需访问 JuiceFS 挂载点，无需感知底层是哪朵云。
+        跨云访问的延迟和稳定性问题由 JuiceFS 的缓存和预热机制在客户端层面解决。
+      </p>
+      <div class="tags">
+        <span class="tag">mcap · 点云 · PNG</span>
+        <span class="tag orange">阿里云 + 腾讯云 + IDC</span>
+        <span class="tag green">JuiceFS 统一挂载点</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>📋 Lance 标注表的真实结构</h3>
+      <p>Lance 标注表每行对应一个视频帧（或一个数据包），列分三类：</p>
+      <ul style="margin-top:10px;">
+        <li><strong>标量列</strong>：<code>weather_type: int8</code>（1=雨天，2=晴天，3=太阳雨…）、<code>scene_type: int8</code>、<code>speed_range: float32</code> 等。全是整型/布尔/浮点，<strong>同列类型一致，列式压缩比极高</strong>。</li>
+        <li style="margin-top:6px;"><strong>向量列</strong>：大模型对每帧提取的 embedding，128/256/768 维 float32 数组，支持 HNSW 向量检索。</li>
+        <li style="margin-top:6px;"><strong>元数据/路径列</strong>：<code>raw_path: string</code>（软链接指向原始文件在对象存储上的路径）、<code>timestamp: int64</code>。点云可以整列存储（一列 = 一个雷达传感器的数据包）。</li>
+      </ul>
+      <p style="margin-top:12px;">
+        一张大宽表可有<strong>几百到上千列</strong>（团队持续追加新标注维度，不需要重写旧数据），
+        当前 POC 已验证 <strong>50 亿行</strong>，奔着千亿行目标。
+        按 fragment 切片控制单文件大小（类似 JuiceFS 的 chunk 概念）。
+      </p>
+      <div class="tags">
+        <span class="tag purple">标量列（压缩比极高）</span>
+        <span class="tag purple">向量列（embedding）</span>
+        <span class="tag">元数据软链接</span>
+        <span class="tag orange">50 亿行 POC 验证</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>🔍 数据挖掘：标量 + 向量联合查询</h3>
+      <p>数据闭环的核心操作是从海量帧中筛选出符合训练需求的子集，全部通过 pylance Python SDK 完成：</p>
+      <div style="background:#1e1e2e;border-radius:8px;padding:16px 20px;margin:14px 0;font-family:'JetBrains Mono',Consolas,monospace;font-size:0.84rem;color:#cdd6f4;line-height:1.9;">
+        <span style="color:#6c7086;"># 场景1：标量精确过滤——筛选雨天城市道路场景</span><br>
+        df = tbl.search().where(<span style="color:#a6e3a1;">"weather_type = 1 AND scene_type = 3"</span>).to_pandas()<br><br>
+        <span style="color:#6c7086;"># 场景2：向量相似度检索——找与大雨场景相似的帧</span><br>
+        results = tbl.search(query_vec, query_type=<span style="color:#a6e3a1;">"vector"</span>).metric(<span style="color:#a6e3a1;">"cosine"</span>).limit(<span style="color:#fab387;">10000</span>).to_pandas()<br><br>
+        <span style="color:#6c7086;"># 场景3：标量 + 向量联合——业务世界观升级时做模糊 double-check</span><br>
+        results = tbl.search(query_vec).where(<span style="color:#a6e3a1;">"weather_type IN (1,3)"</span>).limit(<span style="color:#fab387;">5000</span>).to_pandas()
+      </div>
+      <p>
+        <strong>为什么要联合检索？</strong> 业务世界观在持续演进：一开始只有"雨天/非雨天"二分，
+        随着模型迭代要细化为"大雨/中雨/太阳雨"。标量标注是人/机器标的确定值，
+        向量 embedding 提供相似度模糊判断，两者结合才能覆盖世界观升级时的灰色地带。
+      </p>
+      <div class="tags">
+        <span class="tag green">pylance Python SDK（极度推荐）</span>
+        <span class="tag purple">标量精确 + 向量模糊联合</span>
+        <span class="tag orange">世界观升级迭代友好</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>♻️ 闭环写回：只改列，不改原始文件</h3>
+      <p>
+        标注属性定义变更时（如把"雨天"细化为三级），<strong>只需修改 Lance 表中对应的列</strong>，
+        无需重写原始 mcap/点云文件，也无需重写其他列。
+        Lance 列级热更新让数据闭环的迭代成本极低——这是相比 LMDB 行式存储的核心优势之一。
+      </p>
+      <p>
+        数据闭环跑完一个批次后，对应数据在 JuiceFS 缓存层<strong>主动 evict</strong>，
+        腾出 NVMe 空间给下一个批次，避免缓存无限膨胀（Alluxio 没有这个能力）。
+      </p>
+      <div class="tags">
+        <span class="tag green">列级热更新</span>
+        <span class="tag orange">主动 evict，缓存不膨胀</span>
+      </div>
+    </div>
+
+    <blockquote>
+      "标注数据可能我今天识别一个产品，明天我需要细化，那么疯狂读改写，那就非常适合用 Lance 了。
+      比方说我觉得这个车它应该有低速高速，但是明天你要是对这个低速高速的定义给我改了，
+      那我以前就得把所有文件删掉重改。但我现在只要改那一列，加一列，把旧那一列干掉就可以了。"
+      <cite>—— 客户方原话</cite>
+    </blockquote>
+
+    <!-- 5.2 模型训练 -->
+    <div class="section-title" style="font-size:1.1rem;border-color:#ea580c;margin-top:32px;">5.2&nbsp; 模型训练</div>
+
+    <div class="card">
+      <h3>📦 训练集生成：从 Lance 到 trainlist</h3>
+      <p>
+        训练集生成过程：从 Lance 表中按条件筛选出目标帧的 <code>raw_path</code> 列，
+        生成一个 <strong>trainlist</strong>（文件路径列表），每一行指向 JuiceFS 挂载点下的原始帧文件。
+      </p>
+      <p>
+        <strong>训练只读帧，不读整段视频。</strong> 一段 mcap 视频可能几个 GB，
+        训练只需要其中的某些帧（PNG 图片）。Lance 的列裁剪让训练框架精确知道读哪些帧、
+        读哪几列标注属性（只读 5% 的列），大幅降低无效 IO。
+      </p>
+      <div class="tags">
+        <span class="tag">trainlist = 帧路径列表</span>
+        <span class="tag orange">只读帧，不读整段视频</span>
+        <span class="tag green">列裁剪 → 只读 5% 的列</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>🔥 预热机制：GPU 启动前数据已就位</h3>
+      <p>这是 JuiceFS 在训练场景中最核心的价值——<strong>消灭 GPU 空转</strong>：</p>
+      <ol style="padding-left:20px;margin-top:10px;">
+        <li style="margin-bottom:8px;">训练任务提交时，同步触发预热任务</li>
+        <li style="margin-bottom:8px;">预热任务读 trainlist，通过 JuiceFS 将所有待训练帧文件下载到 GPU 节点本地 NVMe 盘（<strong>Cache Group 池化多块 NVMe</strong>）</li>
+        <li style="margin-bottom:8px;">预热完成后，训练任务才正式启动，直接读本地 NVMe，时延 &lt;1ms</li>
+        <li>训练批次结束，主动 evict 该批次缓存，腾出空间</li>
+      </ol>
+      <p style="margin-top:12px;">
+        <strong>为什么性价比极高？</strong>
+        多云/多 IDC 场景下，GPU 跨云直读 S3 每次请求延迟达 80-100ms，
+        且 GPU 机器之间走 RDMA 但存储网络需经过多层交换机，抖动严重。
+        预热后本地 NVMe 延迟 &lt;1ms，GPU 利用率从不足 50% 提升到接近 100%。
+        <strong>GPU 空转 30 秒的成本（A100/H100 按小时计费）远超整套存储加速投入。</strong>
+      </p>
+      <div class="tags">
+        <span class="tag red">GPU 空转 30s 成本 &gt;&gt; 存储投入</span>
+        <span class="tag green">NVMe 本地读 &lt;1ms</span>
+        <span class="tag orange">跨云 S3 延迟 80-100ms → 消灭</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>📎 clip 局部性保证：训练质量的工程基础</h3>
+      <p>
+        自动驾驶训练中，时序模型（行为预测、BEV 感知等）需要同一 clip 的连续帧在同一个 batch 中出现，
+        不能被打散给不同 worker。
+      </p>
+      <p>
+        <strong>clip 定义</strong>：一段连续行驶视频片段（通常几秒到几十秒）。
+        训练时 clip 之间可以打散、随机排列，但 <strong>clip 内的帧必须连续不拆散</strong>。
+      </p>
+      <p>
+        这个逻辑在 S3 层或 Alluxio 层无法实现。JuiceFS 作为富客户端，
+        在客户端层面保证 clip 内的帧在 Cache Group 上连续存储，
+        预热时按 clip 为单位批量拉取，训练框架只管从挂载点读，无需感知底层分布。
+      </p>
+      <div class="tags">
+        <span class="tag purple">clip 内不打散</span>
+        <span class="tag">clip 间可乱序</span>
+        <span class="tag green">富客户端实现，S3/Alluxio 做不到</span>
+      </div>
+    </div>
+
+    <blockquote>
+      "我知道我要读哪些数据，甚至知道读这些数据的哪一帧，那我提前把它预热过来……
+      我的 GPU 下面已经有本地盘了，我的通信我连存储高性能存储都可以省掉很大一部分。
+      如果做不到非常极致的场景，那么就证明它们的数据 IO 是一定出问题了。"
+      <cite>—— 客户方原话</cite>
+    </blockquote>
+
+  </div>
+
+  <!-- ── Section 6：整体架构 ── -->
+  <div class="section">
+    <div class="section-title">六、整体架构：Lance 做湖，JuiceFS 做路</div>
 
     <div class="card">
       <h3>架构层次</h3>
-      <pre>
-┌──────────────────────────────────────────────────────────────────┐
-│                         算法 / 训练层                              │
-│   trainlist 驱动预热 │ Python pylance SDK │ clip 局部性保证        │
-└───────────────────────────────┬──────────────────────────────────┘
-                                │ POSIX / FUSE
-┌───────────────────────────────▼──────────────────────────────────┐
-│                      JuiceFS（控制面）                             │
-│  ┌────────────────┐  ┌────────────────┐  ┌───────────────────┐   │
-│  │  Cache Group   │  │  客户端 QoS    │  │  主动预热 / evict  │   │
-│  │  NVMe 池化     │  │  clip 局部性   │  │  业务 SDK 封装     │   │
-│  └────────────────┘  └────────────────┘  └───────────────────┘   │
-└───────────────────────────────┬──────────────────────────────────┘
-                                │ 统一访问
-        ┌───────────────────────┴────────────────────┐
-        │                                            │
-┌───────▼──────────┐                    ┌───────────▼───────────┐
-│   Lance 数据湖    │                    │   原始数据（对象存储）  │
-│  标注列式数据     │                    │  mcap / 点云 / PNG    │
-│  标量 + 向量索引  │ ←── 元数据软链接 ──│  阿里云 / 腾讯云 / IDC │
-│  fragment 切片   │                    │  S3 接口              │
-└──────────────────┘                    └───────────────────────┘</pre>
+      <!-- HTML diagram replacing ASCII art (Chinese chars break monospace alignment) -->
+      <div style="margin:16px 0;font-size:0.88rem;border-radius:10px;overflow:hidden;border:1px solid #e2e8f0;">
+        <div style="background:#1e293b;color:#f1f5f9;padding:14px 24px;text-align:center;">
+          <strong style="font-size:0.95rem;">算法 / 训练层</strong>
+          <div style="margin-top:6px;color:#94a3b8;font-size:0.8rem;">
+            trainlist 驱动预热 &nbsp;·&nbsp; Python pylance SDK &nbsp;·&nbsp; clip 局部性保证
+          </div>
+        </div>
+        <div style="background:#e2e8f0;text-align:center;padding:4px;color:#64748b;font-size:0.78rem;letter-spacing:0.05em;">↕ &nbsp;POSIX / FUSE</div>
+        <div style="background:#1d4ed8;color:white;padding:14px 24px;">
+          <div style="text-align:center;font-weight:700;font-size:0.95rem;margin-bottom:10px;">JuiceFS（控制面）</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+            <div style="background:rgba(255,255,255,0.15);border-radius:6px;padding:10px 8px;text-align:center;">
+              <div style="font-weight:600;font-size:0.84rem;">Cache Group</div>
+              <div style="font-size:0.76rem;opacity:0.85;margin-top:3px;">NVMe 池化</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.15);border-radius:6px;padding:10px 8px;text-align:center;">
+              <div style="font-weight:600;font-size:0.84rem;">客户端 QoS</div>
+              <div style="font-size:0.76rem;opacity:0.85;margin-top:3px;">clip 局部性</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.15);border-radius:6px;padding:10px 8px;text-align:center;">
+              <div style="font-weight:600;font-size:0.84rem;">主动预热 / evict</div>
+              <div style="font-size:0.76rem;opacity:0.85;margin-top:3px;">业务 SDK 封装</div>
+            </div>
+          </div>
+        </div>
+        <div style="background:#e2e8f0;text-align:center;padding:4px;color:#64748b;font-size:0.78rem;letter-spacing:0.05em;">↕ &nbsp;统一访问</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;">
+          <div style="background:#0f3460;color:white;padding:16px 20px;">
+            <div style="font-weight:700;font-size:0.9rem;margin-bottom:8px;">Lance 数据湖</div>
+            <div style="font-size:0.8rem;line-height:1.7;opacity:0.9;">
+              标注列式数据<br>
+              标量 + 向量索引<br>
+              fragment 切片
+            </div>
+          </div>
+          <div style="background:#0f3460;color:white;padding:16px 20px;border-left:1px solid rgba(255,255,255,0.15);">
+            <div style="font-weight:700;font-size:0.9rem;margin-bottom:8px;">原始数据（对象存储）</div>
+            <div style="font-size:0.8rem;line-height:1.7;opacity:0.9;">
+              mcap / 点云 / PNG<br>
+              阿里云 / 腾讯云 / IDC<br>
+              ← 元数据软链接引用
+            </div>
+          </div>
+        </div>
+      </div>
       <div class="tags">
         <span class="tag green">Lance：数据湖格式层</span>
         <span class="tag">JuiceFS：统一访问 + 加速层</span>
