@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clash TUN 模式原理与系统代理设置指南 · 一次企业 VPN 冲突实战排障 · 2026-09</title>
+<style>
+  :root {
+    --primary: #1a1a2e;
+    --accent: #e94560;
+    --accent2: #0f3460;
+    --bg: #f8f9fa;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --code-bg: #1e1e2e;
+    --code-fg: #cdd6f4;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --success: #10b981;
+    --info: #3b82f6;
+    --muted: #64748b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: #1e293b;
+    line-height: 1.7;
+  }
+
+  /* ── Hero ── */
+  .hero {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    color: white;
+    padding: 60px 40px 50px;
+  }
+  .hero-inner { max-width: 960px; margin: 0 auto; }
+  .hero-tag {
+    display: inline-block;
+    background: rgba(233,69,96,0.2);
+    color: #f87171;
+    border: 1px solid rgba(233,69,96,0.4);
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+  .hero h1 {
+    font-size: 2.1rem;
+    font-weight: 800;
+    line-height: 1.25;
+    margin-bottom: 16px;
+  }
+  .hero p { color: #94a3b8; font-size: 1rem; max-width: 760px; }
+  .hero-meta {
+    margin-top: 28px;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    flex-wrap: wrap;
+    font-size: 0.875rem;
+    color: #94a3b8;
+  }
+  .hero-meta strong { color: #e2e8f0; }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 0.8rem;
+  }
+
+  /* ── Layout ── */
+  .container { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+  .main { padding: 48px 24px; max-width: 960px; margin: 0 auto; }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px 32px;
+    margin-bottom: 32px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .card h2 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--primary);
+    margin-bottom: 18px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .card h2 .icon { font-size: 1.3rem; }
+  .card h3 {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #334155;
+    margin: 20px 0 10px;
+  }
+  .card p { color: #475569; margin-bottom: 12px; }
+  .card p:last-child { margin-bottom: 0; }
+
+  /* ── Alert boxes ── */
+  .alert {
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 18px;
+    font-size: 0.92rem;
+    line-height: 1.6;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .alert-icon { font-size: 1.2rem; flex-shrink: 0; margin-top: 1px; }
+  .alert-warn { background: #fffbeb; border: 1px solid #fde68a; color: #78350f; }
+  .alert-danger { background: #fef2f2; border: 1px solid #fecaca; color: #7f1d1d; }
+  .alert-info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a5f; }
+  .alert-success { background: #f0fdf4; border: 1px solid #bbf7d0; color: #14532d; }
+
+  /* ── Code blocks ── */
+  pre {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    border-radius: 10px;
+    padding: 20px 24px;
+    overflow-x: auto;
+    font-size: 0.82rem;
+    font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+    line-height: 1.65;
+    margin: 14px 0;
+    position: relative;
+  }
+  code {
+    background: #f1f5f9;
+    color: #c7254e;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 0.85em;
+    font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  pre code { background: none; color: inherit; padding: 0; border-radius: 0; font-size: inherit; }
+  .comment { color: #6c7086; }
+  .kw { color: #cba6f7; }
+  .fn { color: #89b4fa; }
+  .str { color: #a6e3a1; }
+  .num { color: #fab387; }
+  .warn-line { color: #f38ba8; font-weight: 600; }
+  .hl { color: #f9e2af; }
+
+  /* ── Flow diagram ── */
+  .flow {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin: 18px 0;
+  }
+  .flow-step {
+    display: flex;
+    align-items: stretch;
+    gap: 16px;
+  }
+  .flow-left {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 40px;
+    flex-shrink: 0;
+  }
+  .flow-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+    margin-top: 4px;
+  }
+  .flow-dot.blue { background: var(--info); }
+  .flow-dot.green { background: var(--success); }
+  .flow-dot.warn { background: var(--warn); }
+  .flow-line {
+    width: 2px;
+    background: var(--border);
+    flex: 1;
+    margin: 4px 6px 0;
+  }
+  .flow-content {
+    padding-bottom: 22px;
+    flex: 1;
+  }
+  .flow-content strong { display: block; font-size: 0.95rem; color: #1e293b; }
+  .flow-content span { font-size: 0.85rem; color: var(--muted); }
+  .flow-step:last-child .flow-line { display: none; }
+
+  /* ── Table ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+    margin: 14px 0;
+  }
+  th {
+    background: #f1f5f9;
+    color: #334155;
+    font-weight: 700;
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 2px solid var(--border);
+  }
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    color: #475569;
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #f8fafc; }
+  .tag-red { color: var(--danger); font-weight: 700; }
+  .tag-green { color: var(--success); font-weight: 700; }
+  .tag-warn { color: var(--warn); font-weight: 700; }
+
+  /* ── Section heading ── */
+  .section-label {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+
+  /* ── Conclusion bar ── */
+  .conclusion {
+    background: linear-gradient(135deg, #0f3460, #1a1a2e);
+    color: white;
+    border-radius: 12px;
+    padding: 32px 36px;
+    margin-bottom: 32px;
+  }
+  .conclusion h2 { color: #f1f5f9; font-size: 1.15rem; margin-bottom: 16px; }
+  .conclusion ul { padding-left: 18px; }
+  .conclusion ul li { color: #94a3b8; font-size: 0.92rem; margin-bottom: 8px; }
+  .conclusion ul li strong { color: #e2e8f0; }
+
+  /* ── Footer ── */
+  footer {
+    background: #1e293b;
+    color: #64748b;
+    text-align: center;
+    padding: 28px;
+    font-size: 0.82rem;
+  }
+  footer a { color: #94a3b8; text-decoration: none; }
+  footer a:hover { color: white; }
+
+  /* ── Responsive ── */
+  @media (max-width: 640px) {
+    .hero { padding: 40px 20px 36px; }
+    .hero h1 { font-size: 1.5rem; }
+    .card { padding: 20px; }
+    pre { font-size: 0.76rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════ HERO -->
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-tag">🔀 网络排障 · 实战笔记</div>
+    <h1>Clash TUN 模式原理与系统代理设置指南<br>——从一次企业 VPN 冲突说起</h1>
+    <p>TUN 模式一开，整机网络全部瘫痪，连 IDE 里的 AI 对话都断线；关掉 TUN 又用不了透明代理。
+       本文从原理层面讲清楚 TUN 模式和系统代理的本质区别，并用一次 Clash Verge + 企业安全 VPN（安心连）
+       的真实冲突案例，给出可复用的排障流程和修复方式。</p>
+    <div class="hero-meta">
+      <span><strong>实战日期：</strong>2026-09-03</span>
+      <span><strong>涉及组件：</strong>Clash Verge（mihomo 内核）· macOS Network Extension</span>
+      <span><strong>适用场景：</strong>Clash / 其他基于 TUN 的代理工具 与 任意企业 VPN 客户端冲突</span>
+      <span>👁 <img src="https://hits.sh/jerrycaimin.github.io/clash-tun-vpn-conflict-guide.svg" alt="views" style="vertical-align:middle;margin-left:4px;"></span>
+    </div>
+  </div>
+</div>
+
+<div class="main">
+
+<!-- ═══════════════ TUN vs 系统代理 -->
+<div class="card">
+  <h2><span class="icon">📐</span>先搞清楚：TUN 模式和系统代理不是一回事</h2>
+  <p>很多人把 Clash 的"TUN 模式"和"系统代理"当成同一个东西的两种开法，其实它们工作在完全不同的层级，
+     互相独立、可以任意组合开关：</p>
+  <table>
+    <thead>
+      <tr><th>对比项</th><th>系统代理（System Proxy）</th><th>TUN 模式</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>工作层级</td>
+        <td>应用层——写入 macOS 系统偏好设置的 HTTP/HTTPS/SOCKS 代理字段</td>
+        <td>网络层——创建虚拟网卡（<code>utun</code>），直接接管 IP 数据包</td>
+      </tr>
+      <tr>
+        <td>生效范围</td>
+        <td>只有<strong>主动读取</strong>系统代理配置的 App 才会走代理（Chrome、Safari 等）</td>
+        <td>系统级透明代理，任何进程的流量都会被拦截转发，不需要 App 配合</td>
+      </tr>
+      <tr>
+        <td>可被检测方式</td>
+        <td><code>networksetup -getwebproxy</code> 等标准 API 直接可读，非常容易被第三方工具"发现"</td>
+        <td>需要检测虚拟网卡 / 路由表 / Network Extension 才能发现，检测成本更高</td>
+      </tr>
+      <tr>
+        <td>配置文件字段（Clash Verge）</td>
+        <td><code>enable_system_proxy</code></td>
+        <td><code>enable_tun_mode</code></td>
+      </tr>
+      <tr>
+        <td>典型问题</td>
+        <td>容易被企业安全软件的"代理合规检测"扫到并报警</td>
+        <td>容易和其他基于 TUN/VPN 的软件抢路由、抢网段，导致断网</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="alert alert-info">
+    <span class="alert-icon">ℹ️</span>
+    <div>两个开关<strong>互相独立、互不依赖</strong>——这意味着关掉系统代理不会影响 TUN 模式的实际转发能力，
+    反之亦然。后面两个真实案例分别对应这两条完全不同的故障路径。</div>
+  </div>
+</div>
+
+<!-- ═══════════════ TUN 原理 -->
+<div class="card">
+  <h2><span class="icon">🔬</span>TUN 模式底层原理</h2>
+  <p>开启 TUN 模式后，Clash（mihomo 内核）大致做了这几件事：</p>
+  <div class="flow">
+    <div class="flow-step">
+      <div class="flow-left"><div class="flow-dot blue"></div><div class="flow-line"></div></div>
+      <div class="flow-content">
+        <strong>① 创建虚拟网卡</strong>
+        <span>通过 macOS 的 Network Extension（<code>NEPacketTunnelProvider</code>）创建一个 <code>utun</code> 接口，
+        分配一个虚拟 IP（如 <code>utun1024</code> → <code>28.0.0.1</code>）</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-left"><div class="flow-dot blue"></div><div class="flow-line"></div></div>
+      <div class="flow-content">
+        <strong>② 抢占路由表（auto-route）</strong>
+        <span>向系统路由表写入指向这个虚拟网卡的路由条目，一般是全局默认路由
+        <code>0.0.0.0/0</code>，配合 <code>strict-route</code> 决定抢占强度</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-left"><div class="flow-dot blue"></div><div class="flow-line"></div></div>
+      <div class="flow-content">
+        <strong>③ 劫持 DNS（dns-hijack + fake-ip）</strong>
+        <span>把所有 <code>:53</code> DNS 查询劫持到自己，用 <code>fake-ip-range</code>
+        网段（默认 <code>198.18.0.1/16</code>）给每个域名分配一个虚拟 IP，不做真实解析</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-left"><div class="flow-dot"></div><div class="flow-line"></div></div>
+      <div class="flow-content">
+        <strong>④ 拦截转发</strong>
+        <span>任何流量只要目的地址落在 fake-ip 网段，mihomo 内核就识别出真实域名，按规则匹配代理节点转发</span>
+      </div>
+    </div>
+  </div>
+  <div class="alert alert-warn">
+    <span class="alert-icon">⚠️</span>
+    <div><strong>问题根源就在这里：</strong>第②步"抢占路由"和第③步"fake-ip 网段"，
+    都可能和另一个同样使用 TUN/VPN 机制的软件冲突——如果对方也声明了同一网段的路由，
+    两边的路由表项就会打架。</div>
+  </div>
+</div>
+
+<!-- ═══════════════ 案例一：路由冲突 -->
+<div class="card">
+  <h2><span class="icon">🧨</span>案例一：fake-ip 网段与企业 VPN 路由冲突，导致全局断网</h2>
+  <span class="section-label">现象</span>
+  <div class="alert alert-danger">
+    <span class="alert-icon">🔴</span>
+    <div>Mac 上同时装了 Clash Verge（TUN 模式）和公司要求的安心连 VPN。只要打开 TUN，
+    <strong>不是某个连接失败，而是整机网络全部异常</strong>——连 VS Code 里跟 AI 助手的对话都报网络错误。
+    关掉 TUN、改用系统代理，一切正常。</div>
+  </div>
+
+  <span class="section-label">诊断</span>
+  <p>先确认企业 VPN 的虚拟网卡具体声明了哪些路由：</p>
+  <pre><span class="comment"># 查看安心连的虚拟网卡(utun4)具体路由了哪些网段</span>
+netstat -rn -f inet | grep utun4
+
+<span class="comment"># 输出：</span>
+10.251.1.1         10.251.1.1         UH                  utun4
+30.0.0.1/32        10.251.1.1         UGSc                utun4
+<span class="warn-line">198.18.0/16        10.251.1.1         UGSc                utun4</span>   <span class="comment">← 就是它！</span></pre>
+  <p>再看 Clash 当前的 TUN / DNS 配置（<code>-f</code> 参数指向的就是内核实际读取的运行时配置文件）：</p>
+  <pre>tun:
+  auto-route: true
+  <span class="warn-line">strict-route: true</span>        <span class="comment"># 强制抢占，哪怕对方已有更具体路由</span>
+  route-exclude-address: []  <span class="comment"># 没有任何排除名单</span>
+dns:
+  enhanced-mode: fake-ip
+  <span class="warn-line">fake-ip-range: 198.18.0.1/16</span>  <span class="comment"># ← 和安心连撞车了</span></pre>
+
+  <span class="section-label">根因</span>
+  <div class="alert alert-warn">
+    <span class="alert-icon">⚠️</span>
+    <div>安心连给自己的隧道静态声明了 <code>198.18.0.0/16</code> 这个路由（很多企业 VPN 会复用
+    IANA 保留的"基准测试"网段做内部用途），而 Clash 的 fake-ip DNS 机制<strong>默认恰好也用同一个网段</strong>
+    给所有域名分配虚拟 IP。两个 TUN 接口对同一网段抢路由表项，导致 Clash 的 DNS 伪装解析被安心连的路由
+    劫持打穿——所有依赖域名解析的连接全部失败，这就是"全局断网"而非"部分流量异常"的原因。</div>
+  </div>
+
+  <span class="section-label">修复</span>
+  <p>在 Clash Verge 的<strong>全局覆盖模板</strong>（不会被订阅更新覆盖，持久生效）里改两处：</p>
+  <pre><span class="comment"># ~/Library/Application Support/io.github.clash-verge-rev.clash-verge-rev/profiles/Merge.yaml</span>
+profile:
+  store-selected: true
+
+<span class="comment"># 换成不和已知 VPN 冲突的网段</span>
+dns:
+  fake-ip-range: <span class="str">28.0.0.1/16</span>
+
+<span class="comment"># 降低路由抢占强度，给对方留活路</span>
+tun:
+  strict-route: <span class="kw">false</span></pre>
+  <p>改完后在 Clash Verge 里刷新一次订阅（或直接重启 App），让覆盖生效。</p>
+
+  <span class="section-label">验证结果</span>
+  <table>
+    <thead><tr><th>检查项</th><th>结果</th></tr></thead>
+    <tbody>
+      <tr><td>TUN 接口</td><td class="tag-green">分到 28.0.0.1，与企业 VPN 网段不再重叠</td></tr>
+      <tr><td>路由表</td><td class="tag-green">198.18.0/16 仍归企业 VPN，Clash 用 28.0.0.0/16，各走各的</td></tr>
+      <tr><td>DNS 解析</td><td class="tag-green">正常返回 fake-ip，0.08 秒</td></tr>
+      <tr><td>SSH / IDE 网络</td><td class="tag-green">恢复正常</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══════════════ 案例二：系统代理被检测 -->
+<div class="card">
+  <h2><span class="icon">🕵️</span>案例二：企业安全软件报"检测到第三方代理"</h2>
+  <span class="section-label">现象</span>
+  <p>修好 TUN 冲突之后，企业安全软件（安心连）自带的"一键诊断"报了另一项异常：
+     <strong>"网络代理——检测到第三方网络代理，请及时去除代理"</strong>，并提供了一个"一键修复"按钮。</p>
+
+  <div class="alert alert-warn">
+    <span class="alert-icon">⚠️</span>
+    <div>不建议直接点企业安全软件自带的"一键修复"——那是个黑盒，不确定它除了清代理设置，
+    还会不会做别的事情（比如强制杀掉相关进程、修改网络服务优先级，甚至直接退出 Clash）。
+    更稳妥的做法是先自己定位到底是哪个开关触发的检测，手动关掉，风险完全可控。</div>
+  </div>
+
+  <span class="section-label">诊断思路</span>
+  <p>关键线索是措辞——报的是"网络代理"而不是"VPN检测"。国内政企安全软件做代理合规检测，
+     几乎都是最简单直接的方式：调用 macOS 标准 API 读取"系统偏好设置 → 网络 → 代理"配置，
+     而不会去深挖底层的虚拟网卡（那通常归到另一个检测项）。验证一下：</p>
+  <pre><span class="comment"># 用和企业安全软件同样的标准 API 自己先查一遍</span>
+networksetup -getwebproxy Wi-Fi
+networksetup -getsocksfirewallproxy Wi-Fi
+
+<span class="comment"># 输出：</span>
+Enabled: Yes
+Server: 127.0.0.1
+<span class="warn-line">Port: 7897</span>   <span class="comment">← Clash Verge 系统代理模式的默认混合端口</span></pre>
+  <p>再确认"系统代理"和"TUN 模式"在 Clash Verge 自身配置里是不是两个独立开关：</p>
+  <pre><span class="comment"># ~/Library/Application Support/io.github.clash-verge-rev.clash-verge-rev/verge.yaml</span>
+enable_tun_mode: true
+<span class="warn-line">enable_system_proxy: true</span>   <span class="comment">← 就是它被读到了</span></pre>
+
+  <span class="section-label">修复</span>
+  <div class="alert alert-success">
+    <span class="alert-icon">✅</span>
+    <div>在 Clash Verge 里<strong>只关闭"系统代理"这一个开关，TUN 模式继续保持打开</strong>。
+    因为 TUN 在网络层直接接管流量，完全不依赖系统偏好设置里的代理配置——关掉系统代理，
+    企业安全软件检测通过，Clash 的实际转发能力（TUN）丝毫不受影响。</div>
+  </div>
+  <p><strong>日常固定配置：TUN 模式开、系统代理关。</strong>已实测确认企业安全软件诊断通过，
+     且代理功能、独立的 SSH SOCKS5 隧道等均不受影响。</p>
+</div>
+
+<!-- ═══════════════ 通用排查流程 -->
+<div class="card">
+  <h2><span class="icon">🧭</span>通用排查流程（适用于任意"Clash TUN + 其他 VPN"冲突）</h2>
+  <p>换了别的企业 VPN 客户端，或者 Clash 换了内核版本再遇到类似问题，可以照这个顺序走：</p>
+  <div class="flow">
+    <div class="flow-step">
+      <div class="flow-left"><div class="flow-dot warn"></div><div class="flow-line"></div></div>
+      <div class="flow-content">
+        <strong>① 先分清是"全局断网"还是"部分请求失败"</strong>
+        <span>全局断网（含 DNS 解析类应用全灭）→ 大概率是 fake-ip 网段或 DNS 劫持冲突；
+        只是个别域名/IP 连不上 → 大概率是普通的路由排他没配置好</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-left"><div class="flow-dot warn"></div><div class="flow-line"></div></div>
+      <div class="flow-content">
+        <strong>② 查两边虚拟网卡各自声明了哪些网段</strong>
+        <span><code>ifconfig | grep -E 'utun|inet'</code> 找出所有 <code>utun</code> 接口；
+        <code>netstat -rn -f inet | grep utunX</code> 逐个看路由</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-left"><div class="flow-dot warn"></div><div class="flow-line"></div></div>
+      <div class="flow-content">
+        <strong>③ 对比 Clash 的 fake-ip-range 是否落在对方网段内</strong>
+        <span>凡是两边网段有交集，无脑换成对方肯定没用到的网段（如 <code>28.0.0.1/16</code>）</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-left"><div class="flow-dot warn"></div><div class="flow-line"></div></div>
+      <div class="flow-content">
+        <strong>④ 把 strict-route 关掉，降低抢占强度</strong>
+        <span>如果对方声明了具体的内部网段（而不是整个默认路由），配合
+        <code>route-exclude-address</code> 显式排除，让对方的流量继续走自己的隧道</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-left"><div class="flow-dot"></div><div class="flow-line"></div></div>
+      <div class="flow-content">
+        <strong>⑤ 改动写进 Merge.yaml 而不是运行时配置</strong>
+        <span>运行时的 <code>clash-verge.yaml</code> 每次刷新订阅都会被重新生成，
+        直接改它会白改；<code>profiles/Merge.yaml</code> 是持久化覆盖层，改这里才不会被订阅更新冲掉</span>
+      </div>
+    </div>
+  </div>
+
+  <span class="section-label">一键诊断脚本（可直接复制运行）</span>
+  <pre><span class="comment">#!/bin/bash
+# 快速摸清当前所有 utun 接口的归属和路由，定位冲突网段</span>
+<span class="kw">echo</span> <span class="str">'=== 所有 utun 接口 ==='</span>
+<span class="kw">for</span> i in <span class="str">{0..9}</span>; <span class="kw">do</span>
+  ifconfig utun$i 2>/dev/null | <span class="fn">grep</span> -E <span class="str">'inet|mtu'</span> && <span class="kw">echo</span> <span class="str">"  ↑ utun$i"</span>
+<span class="kw">done</span>
+
+<span class="kw">echo</span> <span class="str">'=== 完整 IPv4 路由表 ==='</span>
+netstat -rn -f inet
+
+<span class="kw">echo</span> <span class="str">'=== Clash 当前 tun/dns 配置 ==='</span>
+CONF=<span class="str">"$HOME/Library/Application Support/io.github.clash-verge-rev.clash-verge-rev/clash-verge.yaml"</span>
+<span class="fn">grep</span> -A 10 <span class="str">'^tun:'</span> <span class="str">"$CONF"</span>
+<span class="fn">grep</span> -A 15 <span class="str">'^dns:'</span> <span class="str">"$CONF"</span>
+
+<span class="kw">echo</span> <span class="str">'=== 系统代理是否被写入(企业安全软件常查这个) ==='</span>
+networksetup -getwebproxy Wi-Fi
+networksetup -getsocksfirewallproxy Wi-Fi</pre>
+</div>
+
+<!-- ═══════════════ 结论 -->
+<div class="conclusion">
+  <h2>📌 结论总结</h2>
+  <ul>
+    <li><strong>TUN 模式和系统代理是两套独立机制：</strong>前者在网络层接管数据包，
+        后者只是写入 macOS 系统偏好设置的应用层配置，互不依赖，可以分别开关排查</li>
+    <li><strong>"开 TUN 就全局断网"的典型根因：</strong>Clash 的 <code>fake-ip-range</code>
+        默认网段（<code>198.18.0.0/16</code>）和某些企业 VPN 内部复用的网段撞车，
+        导致 DNS 伪装解析机制被对方路由劫持打穿</li>
+    <li><strong>修复思路：</strong>换一个双方都没用到的 fake-ip 网段（如 <code>28.0.0.1/16</code>），
+        关闭 <code>strict-route</code>，改动写进 <code>Merge.yaml</code> 持久化覆盖层</li>
+    <li><strong>"被安全软件报第三方代理"的典型根因：</strong>对方多半只检测标准的
+        macOS 系统代理设置，而不是 TUN 虚拟网卡；关掉"系统代理"开关、保留 TUN 模式即可通过检测</li>
+    <li><strong>日常推荐配置：</strong>TUN 模式常开、系统代理常关——两者组合下企业安全软件
+        检测通过，Clash 的实际代理转发能力完全不受影响</li>
+    <li><strong>安全提示：</strong>遇到企业安全软件的"一键修复"按钮，优先自己手动定位并关闭
+        对应开关，而不是直接点黑盒修复，避免它顺带做了预期之外的操作</li>
+  </ul>
+</div>
+
+</div><!-- /main -->
+
+<footer>
+  <p>
+    实战记录 · Clash Verge（mihomo 内核）· macOS Network Extension ·
+    <a href="index.html">← 返回首页</a>
+  </p>
+  <p style="margin-top:8px;">涉及配置：<code>profiles/Merge.yaml</code> · <code>verge.yaml</code> · <code>clash-verge.yaml</code></p>
+</footer>
+
+</body>
+</html>
