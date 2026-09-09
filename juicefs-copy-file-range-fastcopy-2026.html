@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>为什么 cp 22GB 文件是瞬间完成的？copy_file_range 在 JuiceFS 上的四层门槛与实锤验证 · 2026-09</title>
+<style>
+  :root {
+    --primary: #1a1a2e;
+    --accent: #e94560;
+    --accent2: #0f3460;
+    --bg: #f8f9fa;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --code-bg: #1e1e2e;
+    --code-fg: #cdd6f4;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --success: #10b981;
+    --info: #3b82f6;
+    --muted: #64748b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: #1e293b;
+    line-height: 1.7;
+  }
+
+  /* ── Hero ── */
+  .hero {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    color: white;
+    padding: 60px 40px 50px;
+  }
+  .hero-inner { max-width: 960px; margin: 0 auto; }
+  .hero-tag {
+    display: inline-block;
+    background: rgba(233,69,96,0.2);
+    color: #f87171;
+    border: 1px solid rgba(233,69,96,0.4);
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+  .hero h1 {
+    font-size: 2.1rem;
+    font-weight: 800;
+    line-height: 1.25;
+    margin-bottom: 16px;
+  }
+  .hero p { color: #94a3b8; font-size: 1rem; max-width: 760px; }
+  .hero-meta {
+    margin-top: 28px;
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .hero-meta span {
+    color: #64748b;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .hero-meta strong { color: #e2e8f0; }
+
+  /* ── Layout ── */
+  .container { max-width: 960px; margin: 0 auto; padding: 48px 24px; }
+  .section { margin-bottom: 56px; }
+  .section-title {
+    font-size: 1.45rem;
+    font-weight: 700;
+    color: var(--primary);
+    border-left: 4px solid var(--accent);
+    padding-left: 14px;
+    margin-bottom: 24px;
+  }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px 32px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.05);
+  }
+  .card h3 {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin-bottom: 12px;
+    color: #1e293b;
+  }
+  .card p, .card li { color: #475569; font-size: 0.96rem; }
+  .card ul { padding-left: 20px; }
+  .card li { margin-bottom: 6px; }
+
+  /* ── Alert boxes ── */
+  .alert {
+    border-radius: 10px;
+    padding: 18px 22px;
+    margin-bottom: 20px;
+    font-size: 0.95rem;
+    line-height: 1.65;
+    border-left: 4px solid;
+  }
+  .alert.danger { background: #fef2f2; border-color: var(--danger); color: #7f1d1d; }
+  .alert.warn   { background: #fffbeb; border-color: var(--warn);   color: #78350f; }
+  .alert.info   { background: #eff6ff; border-color: var(--info);   color: #1e3a5f; }
+  .alert.ok     { background: #f0fdf4; border-color: var(--success); color: #14532d; }
+  .alert strong { font-weight: 700; display: block; margin-bottom: 6px; }
+
+  /* ── Code ── */
+  pre {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    border-radius: 10px;
+    padding: 20px 24px;
+    overflow-x: auto;
+    font-size: 0.88rem;
+    line-height: 1.65;
+    margin: 16px 0;
+    font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+  }
+  code {
+    background: #f1f5f9;
+    color: #e94560;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.88em;
+    font-family: "JetBrains Mono", Consolas, monospace;
+  }
+  pre code { background: none; color: inherit; padding: 0; }
+
+  /* ── Table ── */
+  .tbl-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+  th {
+    background: #1e293b;
+    color: #f1f5f9;
+    font-weight: 600;
+    text-align: left;
+    padding: 12px 16px;
+  }
+  td { padding: 10px 16px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+  tr:nth-child(even) td { background: #f8fafc; }
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+  .badge.high   { background:#fee2e2; color:#b91c1c; }
+  .badge.medium { background:#fef3c7; color:#92400e; }
+  .badge.low    { background:#d1fae5; color:#065f46; }
+
+  /* ── Comparison ── */
+  .cmp-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+  }
+  @media(max-width:600px){ .cmp-grid{ grid-template-columns:1fr; } }
+  .cmp-card {
+    border-radius: 12px;
+    padding: 22px 24px;
+    border: 1px solid;
+  }
+  .cmp-card.red   { border-color:#fca5a5; background:#fff1f2; }
+  .cmp-card.green { border-color:#86efac; background:#f0fdf4; }
+  .cmp-card h4 { font-size:0.95rem; font-weight:700; margin-bottom:10px; }
+  .cmp-card.red   h4 { color:#b91c1c; }
+  .cmp-card.green h4 { color:#15803d; }
+  .cmp-card ul { padding-left: 18px; }
+  .cmp-card li { font-size:0.9rem; color:#475569; margin-bottom:5px; }
+
+  /* ── TOC ── */
+  .toc {
+    background: #f0f4ff;
+    border: 1px solid #c7d2fe;
+    border-radius: 12px;
+    padding: 22px 28px;
+    margin-bottom: 40px;
+  }
+  .toc h2 { font-size: 0.95rem; font-weight: 700; color: #3730a3; margin-bottom: 12px; }
+  .toc ol { padding-left: 20px; }
+  .toc li { font-size: 0.92rem; margin-bottom: 5px; }
+  .toc a { color: var(--accent2); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+
+  /* ── TL;DR ── */
+  .tldr {
+    background: linear-gradient(135deg, #1a1a2e, #16213e);
+    color: white;
+    border-radius: 16px;
+    padding: 32px 36px;
+    margin-bottom: 40px;
+  }
+  .tldr h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: 18px; color: #e2e8f0; }
+  .tldr li { color: #94a3b8; font-size: 0.95rem; margin-bottom: 8px; padding-left: 4px; }
+  .tldr strong { color: #f87171; }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+  .back-link { color: var(--muted); font-size: 0.88rem; text-decoration: none; }
+  .back-link:hover { color: var(--accent2); }
+  .footer { text-align: center; color: var(--muted); font-size: 0.82rem; padding: 32px; }
+
+  .hl-red  { color: #b91c1c; font-weight: 700; }
+  .hl-warn { color: #92400e; font-weight: 700; }
+  .hl-ok   { color: #065f46; font-weight: 700; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════ HERO ═══════════════════════════════════════ -->
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-tag">🔍 原理调查报告</div>
+    <h1>为什么 cp 22GB 文件是瞬间完成的？<br>copy_file_range 在 JuiceFS 上的四层门槛与实锤验证</h1>
+    <p>从一次 22GB 文件 <code>cp</code> 秒级完成的现象出发，拆解 copy_file_range 涉及的内核 / glibc / coreutils / JuiceFS 客户端四层支持要求，用 accesslog 逐字段验证，并延伸到容器 / Kubernetes Pod 场景下的额外变量</p>
+    <div class="hero-meta">
+      <span>📅 <strong>2026-09-09</strong></span>
+      <span>🔖 <strong>Ubuntu 22.04 · Linux 5.15</strong></span>
+      <span>🏷 <strong>copy_file_range · FUSE · cp · reflink</strong></span>
+      <span>📂 <strong>pkg/vfs/vfs.go · pkg/sync/sync.go</strong></span>
+      <span>👁 <img src="https://hits.sh/jerrycaimin.github.io/juicefs-copy-file-range-fastcopy-2026.html.svg" alt="views" style="vertical-align:middle;margin-left:4px;"></span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ BODY ═══════════════════════════════════════ -->
+<div class="container">
+
+  <!-- TL;DR -->
+  <div class="tldr">
+    <h2>⚡ TL;DR · 三句话结论</h2>
+    <ul>
+      <li>22GB 文件 <code>cp</code> 瞬间完成，是因为 Linux 内核把 <code>cp</code> 发起的 <code>copy_file_range()</code> 转发给了 JuiceFS 的 FUSE 处理器，JuiceFS 只做了<strong>元数据克隆</strong>（新建 inode 引用同一批底层 slice/对象存储数据），完全没有真实搬运 22GB 数据。</li>
+      <li>这条快速路径要求 <strong>内核 syscall（≥4.5）+ FUSE 转发（≈4.20）+ glibc wrapper（≥2.27）+ coreutils 版本（≥8.28）+ JuiceFS 客户端支持（≥v4.4.6，2020 年就有）</strong>同时满足；Ubuntu 22.04（内核 5.15）四层全过，但<strong class="hl-red">不是任何场景下都 100% 保证生效</strong>，跨文件系统、走网关协议、seccomp 限制、sandbox 运行时都可能让它悄悄回退成真实拷贝。</li>
+      <li>验证方法很直接：<code>grep copy_file_range /var/log/access.log</code>（或 <code>strace -e trace=copy_file_range</code>），看每次调用的 offset/size 是否正好覆盖整个文件、返回是否全是 <code>OK</code>。</li>
+    </ul>
+  </div>
+
+  <!-- TOC -->
+  <div class="toc">
+    <h2>📑 目录</h2>
+    <ol>
+      <li><a href="#s1">现象：22GB 文件的 cp 秒级完成</a></li>
+      <li><a href="#s2">copy_file_range 涉及的四层门槛</a></li>
+      <li><a href="#s3">JuiceFS 客户端侧：这条快速路径的历史</a></li>
+      <li><a href="#s4">为什么不能说"每次 100% 保证"</a></li>
+      <li><a href="#s5">accesslog 实锤验证：逐字段解读</a></li>
+      <li><a href="#s6">延伸：跑在容器 / Kubernetes Pod 里是否一样</a></li>
+      <li><a href="#s7">自检清单</a></li>
+    </ol>
+  </div>
+
+  <!-- ─────────────────────────────────────── S1 ─────────────────────────────────────── -->
+  <div class="section" id="s1">
+    <h2 class="section-title">① 现象：22GB 文件的 cp 秒级完成</h2>
+
+    <div class="card">
+      <h3>起因</h3>
+      <p>在 JuiceFS 挂载点内执行：</p>
+      <pre><code>cp __0_0.distcp __0_0.distcp2</code></pre>
+      <p style="margin-top:10px">源文件 22,762,256,418 字节（约 22GB），命令几乎瞬间返回：</p>
+      <pre><code>-rwxrwxrwx  1 root root  22762256418 Aug 14 14:46 __0_0.distcp
+-rwxr-xr-x  1 root root  22762256418 Sep  9 15:15 __0_0.distcp2</code></pre>
+    </div>
+
+    <div class="alert info">
+      <strong>📌 文档原文</strong>
+      JuiceFS 文档在 <code>clone</code> 命令一节提到：<em>"对于 Linux 客户端来说，如果所使用的内核支持 copy_file_range，那么调用 cp 时，实际发生的也是同样的元数据拷贝，调用将会格外迅速。"</em>——这次现象正是这句话的真实写照。
+    </div>
+  </div>
+
+  <!-- ─────────────────────────────────────── S2 ─────────────────────────────────────── -->
+  <div class="section" id="s2">
+    <h2 class="section-title">② copy_file_range 涉及的四层门槛</h2>
+
+    <div class="card">
+      <p><code>copy_file_range(2)</code> 听起来是"一个内核版本号"就能回答的问题，实际上要拆成好几层，任何一层不满足都会导致静默回退到普通 read/write。</p>
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>层级</th><th>最低要求</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>① VFS 系统调用本身存在</strong></td>
+            <td>Linux 4.5（2016）</td>
+            <td>syscall 最早引入的版本</td>
+          </tr>
+          <tr>
+            <td><strong>② 语义健壮、跨文件系统不会"假成功"</strong></td>
+            <td>Linux 5.3 重写，<br>Linux 5.19 才彻底修复</td>
+            <td>man page 原话："Applications should target the behavior and requirements of Linux 5.19"；5.3~5.18 之间在某些虚拟文件系统上"报告成功但实际没拷贝"的 bug 一直存在</td>
+          </tr>
+          <tr>
+            <td><strong>③ FUSE 内核驱动转发给用户态文件系统</strong></td>
+            <td>Linux 4.20 左右</td>
+            <td>JuiceFS 是 FUSE 文件系统，没有这层，挂载点收到的是 <code>ENOSYS</code>/<code>EOPNOTSUPP</code>，glibc/cp 直接静默走回退路径</td>
+          </tr>
+          <tr>
+            <td><strong>④ glibc 有对应 wrapper</strong></td>
+            <td>glibc ≥ 2.27（2018 引入 fallback，2.30 起要求内核原生支持）</td>
+            <td>Ubuntu 22.04 glibc 2.35，满足</td>
+          </tr>
+          <tr>
+            <td><strong>⑤ coreutils 的 cp 会尝试调用它</strong></td>
+            <td>coreutils ≥ 8.28（2017）</td>
+            <td>更早版本的 <code>cp</code> 根本不会碰这个 syscall；Ubuntu 22.04 coreutils 8.32，满足</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="alert ok">
+      <strong>✅ Ubuntu 22.04 的结论</strong>
+      内核 5.15 + glibc 2.35 + coreutils 8.32，五层门槛全部满足，比 Ubuntu 18.04 GA 内核（4.15，连第③层都过不了）安全得多。
+    </div>
+  </div>
+
+  <!-- ─────────────────────────────────────── S3 ─────────────────────────────────────── -->
+  <div class="section" id="s3">
+    <h2 class="section-title">③ JuiceFS 客户端侧：这条快速路径的历史</h2>
+
+    <div class="card">
+      <h3>并不是新特性</h3>
+      <p>要真正做到"只拷贝元数据（slice 引用计数）、不搬对象存储数据"，JuiceFS 的 FUSE 处理器自己也要实现 <code>CopyFileRange</code>。翻了一下 release 记录：</p>
+      <pre><code>## JuiceFS 4.4.6 (2020/08/14)
+- New
+  - Support copy_file_range() to allow faster copy.</code></pre>
+      <p style="margin-top:10px">这个能力从 <strong>2020 年的 v4.4.6</strong> 就有了，属于非常老的特性，之后陆续修过几个 bug（大段内容整数溢出、copy 到自身死锁、有空洞文件时的处理、多用户组权限校验错误导致 EACCES 等），说明这条路径一直在被使用和加固。</p>
+    </div>
+
+    <div class="alert warn">
+      <strong>⚠ 一个有趣的对照：juicefs sync 更保守</strong>
+      同一个代码仓库里，<code>juicefs sync file:// file://</code>（Go 实现）对这个 syscall 反而更谨慎——只有内核 ≥ 5.3 才会尝试调用，原因是 Go 标准库自己就不信任 5.3 之前的跨文件系统语义：
+      <pre style="margin-top:10px"><code>// copy_file_range() system call first appeared in Linux 4.5, and reworked in 5.3
+// Go requires kernel >= 5.3 to use copy_file_range(), see:
+// https://github.com/golang/go/blob/go1.17.11/src/internal/poll/copy_file_range_linux.go#L58-L66
+if major > 5 || (major == 5 && minor >= 3) {
+    ...
+    object.TryCFR = true
+}</code></pre>
+      <p style="margin-top:8px">这是 <code>juicefs sync</code> 命令自己的判断逻辑，跟本文讨论的"cp 在 JuiceFS 挂载点内触发 FUSE CopyFileRange"是两条完全不同的代码路径，不要混淆。</p>
+    </div>
+  </div>
+
+  <!-- ─────────────────────────────────────── S4 ─────────────────────────────────────── -->
+  <div class="section" id="s4">
+    <h2 class="section-title">④ 为什么不能说"每次 100% 保证"</h2>
+
+    <div class="card">
+      <p>即使内核和客户端都满足条件，以下几种情况会让 <code>cp</code> <strong>悄无声息地退化成真实字节拷贝</strong>，不会有任何警告或报错：</p>
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>场景</th><th>原因</th><th>影响</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>跨文件系统 / 跨挂载点</strong></td>
+            <td><code>copy_file_range</code> 只能在同一个文件系统内生效，这是内核语义，不是 JuiceFS 特有限制</td>
+            <td><span class="badge high">高</span></td>
+          </tr>
+          <tr>
+            <td><strong>走的不是 FUSE 路径</strong></td>
+            <td>S3 网关 / WebDAV / NFS·SMB 网关 / Hadoop Java SDK / Windows 客户端都不经过这个 FUSE handler</td>
+            <td><span class="badge high">高</span></td>
+          </tr>
+          <tr>
+            <td><strong>coreutils 一旦失败就永久回退</strong></td>
+            <td>第一次调用 <code>copy_file_range()</code> 返回任何非预期错误（EINVAL/EACCES/EOPNOTSUPP/ENOSYS/EXDEV），<code>cp</code> 在这次拷贝内部就永久切回普通读写循环</td>
+            <td><span class="badge medium">中</span></td>
+          </tr>
+          <tr>
+            <td><strong>显式选项 / 边界情况</strong></td>
+            <td><code>--sparse=always</code>、目标文件以 <code>O_APPEND</code>/不可变属性打开等</td>
+            <td><span class="badge low">低</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ─────────────────────────────────────── S5 ─────────────────────────────────────── -->
+  <div class="section" id="s5">
+    <h2 class="section-title">⑤ accesslog 实锤验证：逐字段解读</h2>
+
+    <div class="card">
+      <h3>原始日志</h3>
+      <pre><code>2026.09.09 15:24:04.759169 [uid:0,gid:0,pid:2619367] copy_file_range (32018086,0,66775228,0,4294963200,0x0): OK &lt;0.000686&gt;
+2026.09.09 15:24:04.759718 [uid:0,gid:0,pid:2619367] copy_file_range (32018086,4294963200,66775228,4294963200,4294963200,0x0): OK &lt;0.000475&gt;
+2026.09.09 15:24:04.760263 [uid:0,gid:0,pid:2619367] copy_file_range (32018086,8589926400,66775228,8589926400,4294963200,0x0): OK &lt;0.000480&gt;
+2026.09.09 15:24:04.760855 [uid:0,gid:0,pid:2619367] copy_file_range (32018086,12884889600,66775228,12884889600,4294963200,0x0): OK &lt;0.000530&gt;
+2026.09.09 15:24:04.761381 [uid:0,gid:0,pid:2619367] copy_file_range (32018086,17179852800,66775228,17179852800,4294963200,0x0): OK &lt;0.000465&gt;
+2026.09.09 15:24:04.761958 [uid:0,gid:0,pid:2619367] copy_file_range (32018086,21474816000,66775228,21474816000,1287440418,0x0): OK &lt;0.000507&gt;</code></pre>
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>字段</th><th>示例值</th><th>含义</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>nodeIn</code></td>
+            <td>32018086</td>
+            <td>源文件 inode（<code>__0_0.distcp</code>）</td>
+          </tr>
+          <tr>
+            <td><code>nodeOut</code></td>
+            <td>66775228</td>
+            <td>目标文件 inode（<code>__0_0.distcp2</code>）</td>
+          </tr>
+          <tr>
+            <td><code>size</code></td>
+            <td>4294963200 ≈ 4GB</td>
+            <td>每次调用拷贝的分段大小</td>
+          </tr>
+          <tr>
+            <td><code>flags</code></td>
+            <td>0x0</td>
+            <td>无特殊标志</td>
+          </tr>
+          <tr>
+            <td>耗时</td>
+            <td>0.5～0.7 毫秒</td>
+            <td>纯元数据操作的量级，不可能是真实数据搬运</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="alert ok">
+      <strong>✅ 字节数完全对上</strong>
+      6 次调用，每次约 4GB（4294963200 字节），offset 依次递增，加起来：
+      <pre style="margin-top:8px"><code>5 × 4294963200 + 1287440418 = 22762256418 字节</code></pre>
+      正好等于文件大小 <code>22762256418</code>，严丝合缝。
+    </div>
+
+    <div class="card">
+      <h3>几个值得注意的细节</h3>
+      <ul>
+        <li><strong>为什么分成 6 段而不是一次性拷贝整个 22GB？</strong> 这是 FUSE/coreutils 层的正常行为：<code>copy_file_range()</code> 单次调用有传输上限（截断到约 4GB 附近的量级），所以 <code>cp</code> 会循环调用多次直到搬完整个文件，不代表 fallback。</li>
+        <li><strong>每次调用都是 OK，没有一次报错</strong>——说明全程没有触发 coreutils 的"失败后永久回退到 read/write"逻辑，全程走元数据克隆路径，这就是为什么 22GB 秒级完成。</li>
+        <li><strong><code>uid:0,gid:0</code></strong>：以 root 身份执行，历史上"多用户组权限校验导致 EACCES"的 bug 在这里不适用（那是非 root 多组场景才会踩的坑）。</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ─────────────────────────────────────── S6 ─────────────────────────────────────── -->
+  <div class="section" id="s6">
+    <h2 class="section-title">⑥ 延伸：跑在容器 / Kubernetes Pod 里是否一样</h2>
+
+    <div class="card">
+      <h3>内核层：完全继承宿主机，没有例外</h3>
+      <p>容器不虚拟化内核，Pod 里的进程发起的所有系统调用（包括 <code>copy_file_range</code>）最终都是由<strong>宿主机内核</strong>处理的，跟裸机上跑没有本质区别。容器镜像里装的是 Ubuntu / Alpine / CentOS 都无所谓，宿主机内核版本才是唯一决定因素——普通容器（<code>runc</code>，绝大多数 Kubernetes 集群的默认 runtime）不带自己的内核，syscall 直接穿透到宿主机内核。</p>
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>因素</th><th>影响</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>seccomp</strong></td>
+            <td>可能拦截</td>
+            <td>Kubernetes 默认（<code>RuntimeDefault</code>）继承 containerd/Docker 默认 seccomp profile，<code>copy_file_range</code> 早就在白名单里；但如果集群用了自定义/加固过的受限 profile，可能没把这个较新的 syscall 加入白名单，导致 <code>EPERM</code>，静默回退</td>
+          </tr>
+          <tr>
+            <td><strong>sandbox 运行时（gVisor / Kata）</strong></td>
+            <td>可能不支持或走不同内核</td>
+            <td><code>runsc</code>（gVisor，如 GKE Sandbox）是自己实现的用户态内核，长期以来对 <code>copy_file_range</code> 支持不完整，很多版本直接返回 <code>ENOSYS</code>；Kata Containers 跑在独立轻量 VM 里，用的是 guest kernel，版本不一定等于宿主机</td>
+          </tr>
+          <tr>
+            <td><strong>CSI 挂载边界（JuiceFS 特有）</strong></td>
+            <td>可能跨设备</td>
+            <td>JuiceFS CSI Driver 按 volume+挂载参数 hash 分组共享 mount pod（独立 FUSE 进程）。同一 Pod、同一 PVC 挂载点下的两个路径 <code>cp</code>，走同一个 FUSE 实例（同一 <code>st_dev</code>），行为和裸机一致；但跨两个没有共享 mount pod 的不同 PVC（哪怕背后是同一个 JuiceFS 文件系统）之间 <code>cp</code>，内核视为跨设备（<code>EXDEV</code>），直接失败回退</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="alert info">
+      <strong>📌 怎么在 Pod 里验证</strong>
+      <pre style="margin-top:8px"><code># 进到 Pod 里直接看
+kubectl exec -it &lt;pod&gt; -- strace -f -e trace=copy_file_range cp /data/a /data/b
+
+# 或者去宿主机上找对应 mount pod 的 accesslog，跟裸机场景查法完全一样
+grep copy_file_range /var/log/access.log</code></pre>
+      <p style="margin-top:8px">只要看到跟本文一样的 <code>copy_file_range (...): OK</code>，就说明这个 Pod 场景和裸机上的表现完全等价；如果一次都没出现，或者 <code>strace</code> 里只看到大量 <code>read</code>/<code>write</code>，基本可以定位到是上面三个因素之一在起作用。</p>
+    </div>
+  </div>
+
+  <!-- ─────────────────────────────────────── S7 ─────────────────────────────────────── -->
+  <div class="section" id="s7">
+    <h2 class="section-title">⑦ 自检清单</h2>
+
+    <div class="cmp-grid">
+      <div class="cmp-card green">
+        <h4>✅ 大概率能走快速路径</h4>
+        <ul>
+          <li>Ubuntu 20.04/22.04/24.04 等主流现代发行版（内核 ≥ 5.4）</li>
+          <li>coreutils ≥ 8.28（几乎所有现代发行版默认满足）</li>
+          <li>源和目标在同一个 JuiceFS 挂载点 / 同一个 mount pod 下</li>
+          <li>普通 runc 容器，未启用自定义受限 seccomp</li>
+        </ul>
+      </div>
+      <div class="cmp-card red">
+        <h4>❌ 会静默退化为真实拷贝</h4>
+        <ul>
+          <li>源和目标跨了两个不同的挂载点/文件系统（含跨 PVC 未共享 mount pod）</li>
+          <li>通过 S3 网关 / WebDAV / NFS·SMB 网关 / Hadoop SDK 访问</li>
+          <li>Pod 跑在 gVisor（<code>runsc</code>）等 sandbox 运行时里</li>
+          <li>加固过的 seccomp profile 未放行 <code>copy_file_range</code></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="alert ok">
+      <strong>✅ 唯一靠谱的验证方式</strong>
+      不要凭内核版本号"猜"，直接看 accesslog 或 strace：<code>copy_file_range (...): OK</code> 且耗时在毫秒级 = 走了元数据克隆；如果压根没出现这行日志，或者看到大量 <code>read</code>/<code>write</code> 调用，说明这次拷贝是真实的数据搬运。
+    </div>
+  </div>
+
+  <!-- 回首页 -->
+  <a href="index.html" class="back-link">← 返回首页</a>
+
+</div>
+
+<div class="footer">
+  jerrycaimin.github.io · 2026-09-09 · JuiceFS copy_file_range 原理调查笔记
+</div>
+
+</body>
+</html>
