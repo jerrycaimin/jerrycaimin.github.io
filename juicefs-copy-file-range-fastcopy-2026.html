@@ -260,6 +260,7 @@
       <li><a href="#s5">accesslog 实锤验证：逐字段解读</a></li>
       <li><a href="#s6">延伸：跑在容器 / Kubernetes Pod 里是否一样</a></li>
       <li><a href="#s7">自检清单</a></li>
+      <li><a href="#s8">常见 Linux 发行版内核版本速查</a></li>
     </ol>
   </div>
 
@@ -528,6 +529,70 @@ grep copy_file_range /var/log/access.log</code></pre>
     <div class="alert ok">
       <strong>✅ 唯一靠谱的验证方式</strong>
       不要凭内核版本号"猜"，直接看 accesslog 或 strace：<code>copy_file_range (...): OK</code> 且耗时在毫秒级 = 走了元数据克隆；如果压根没出现这行日志，或者看到大量 <code>read</code>/<code>write</code> 调用，说明这次拷贝是真实的数据搬运。
+    </div>
+  </div>
+
+  <!-- ─────────────────────────────────────── S8 ─────────────────────────────────────── -->
+  <div class="section" id="s8">
+    <h2 class="section-title">⑧ 常见 Linux 发行版内核版本速查</h2>
+
+    <div class="card">
+      <p>"内核 ≥ 5.3" 是一个实用又保守的判断线——它同时覆盖了两个门槛：FUSE 转发支持（约 4.20 就有了，5.3 肯定够）和 VFS 层跨文件系统语义重写（5.3 本身）。严格来说 5.19 才是 man page 建议的"完全可靠"版本，但 5.3~5.18 之间的已知 bug 主要出现在<strong>跨文件系统</strong>场景，同一个 JuiceFS 挂载点内部 <code>cp</code> 的场景不受影响，所以按 <strong>≥5.3</strong> 卡线在实践中是合理的。</p>
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>发行版</th><th>默认(GA)内核</th><th>是否 ≥5.3</th></tr></thead>
+        <tbody>
+          <tr><td>Ubuntu 16.04 LTS</td><td>4.4（HWE 最高到 4.15）</td><td><span class="badge high">❌</span></td></tr>
+          <tr><td>Ubuntu 18.04 LTS</td><td>4.15（HWE 可升到 5.4）</td><td>GA <span class="badge high">❌</span> / HWE <span class="badge low">✅</span></td></tr>
+          <tr><td><strong>Ubuntu 20.04 LTS</strong></td><td><strong>5.4</strong></td><td><span class="badge low">✅</span></td></tr>
+          <tr><td><strong>Ubuntu 22.04 LTS</strong></td><td><strong>5.15</strong></td><td><span class="badge low">✅</span></td></tr>
+          <tr><td><strong>Ubuntu 24.04 LTS</strong></td><td><strong>6.8</strong></td><td><span class="badge low">✅</span></td></tr>
+          <tr><td>Debian 10 (Buster)</td><td>4.19</td><td><span class="badge high">❌</span></td></tr>
+          <tr><td>Debian 11 (Bullseye)</td><td>5.10</td><td><span class="badge low">✅</span></td></tr>
+          <tr><td>Debian 12 (Bookworm)</td><td>6.1</td><td><span class="badge low">✅</span></td></tr>
+          <tr><td>CentOS/RHEL 7</td><td>3.10（大量 backport，但版本号极老）</td><td><span class="badge medium">⚠️ 见下方说明</span></td></tr>
+          <tr><td>CentOS/RHEL 8 / Rocky 8 / Alma 8</td><td>4.18（同样重度 backport）</td><td><span class="badge medium">⚠️ 见下方说明</span></td></tr>
+          <tr><td>RHEL 9 / Rocky 9 / Alma 9 / CentOS Stream 9</td><td>5.14</td><td><span class="badge low">✅</span></td></tr>
+          <tr><td>Amazon Linux 2</td><td>4.14（GA，可选装 5.10 kernel-ng）</td><td>GA <span class="badge high">❌</span> / 可选内核 <span class="badge low">✅</span></td></tr>
+          <tr><td>Amazon Linux 2023</td><td>6.1</td><td><span class="badge low">✅</span></td></tr>
+          <tr><td>SLES 12</td><td>4.4/4.12</td><td><span class="badge high">❌</span></td></tr>
+          <tr><td>SLES 15（SP4 及以后）</td><td>5.14+</td><td><span class="badge low">✅</span></td></tr>
+          <tr><td>openSUSE Leap 15.3+</td><td>5.3+</td><td><span class="badge low">✅</span></td></tr>
+          <tr><td>Fedora（近几年版本）</td><td>5.x/6.x</td><td><span class="badge low">✅</span></td></tr>
+          <tr><td>Arch Linux</td><td>滚动更新，始终最新</td><td><span class="badge low">✅</span></td></tr>
+          <tr><td>openEuler 20.03 LTS</td><td>4.19</td><td><span class="badge high">❌</span></td></tr>
+          <tr><td>openEuler 22.03 LTS</td><td>5.10</td><td><span class="badge low">✅</span></td></tr>
+          <tr><td>openEuler 24.03 LTS</td><td>6.6</td><td><span class="badge low">✅</span></td></tr>
+          <tr><td>Anolis OS 8（龙蜥）</td><td>4.19/5.10（ANCK 可选内核）</td><td>默认 <span class="badge high">❌</span> / 选装 <span class="badge low">✅</span></td></tr>
+          <tr><td>统信 UOS / 银河麒麟 V10</td><td>4.19（部分 SP 升到 5.4/5.10）</td><td><span class="badge medium">视具体 SP，需实测</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="alert danger">
+      <strong>⚠ 关于 CentOS/RHEL 7/8 及国产发行版的特别提醒</strong>
+      <p style="margin-top:8px">这是最容易踩坑的地方：RHEL/CentOS 的内核版本号<strong>长期停留在 3.10（RHEL7）/ 4.18（RHEL8）</strong>，但 Red Hat 会往这些"老版本号"里疯狂 backport 新特性——<strong>版本号完全不能作为判断依据</strong>。就 <code>copy_file_range</code> 而言：</p>
+      <ul style="margin-top:8px;padding-left:20px">
+        <li><strong>RHEL/CentOS 7（3.10 内核）</strong>：据了解这个特性通常<strong>没有</strong>被 backport 进去，<code>cp</code> 在这类系统上大概率走的还是普通读写。</li>
+        <li><strong>RHEL/CentOS 8（4.18 内核）</strong>：情况因具体小版本而异，部分较新的 8.x minor 版本确实 backport 了部分能力，但不能一概而论。</li>
+      </ul>
+      <p style="margin-top:8px">这条规则同样适用于 <strong>openEuler / Anolis / 统信 UOS / 银河麒麟</strong>这些国产发行版——它们大多基于某个上游内核深度定制、打了大量补丁，<code>uname -r</code> 报出来的数字未必能准确反映某个具体 syscall 特性是否存在。</p>
+    </div>
+
+    <div class="card">
+      <h3>结论 / 建议</h3>
+      <ul>
+        <li><strong>Ubuntu 20.04/22.04/24.04、Debian 11/12、RHEL 9 系（Rocky/Alma/Stream 9）、openEuler 22.03+</strong> 这几个是最"干净"的判断对象——版本号即真实能力，直接按 ≥5.3 卡线没问题。</li>
+        <li><strong>RHEL/CentOS 7/8 以及所有国产发行版</strong>，不要信版本号，直接上机器跑一次实测最靠谱：</li>
+      </ul>
+      <pre><code>uname -r
+# 更直接：真实测一次
+strace -e trace=copy_file_range cp testfile testfile2
+# 或者看 JuiceFS accesslog 里有没有出现 copy_file_range 且返回 OK
+grep copy_file_range /var/log/access.log</code></pre>
+      <p style="margin-top:10px">如果是在给客户环境的验收清单打勾，建议清单里加一条"用上面命令实测确认"，而不是只看 <code>/etc/os-release</code> 或 <code>uname -r</code> 的数字。</p>
     </div>
   </div>
 
