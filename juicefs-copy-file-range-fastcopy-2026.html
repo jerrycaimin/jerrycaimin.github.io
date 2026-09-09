@@ -510,7 +510,7 @@ grep copy_file_range /var/log/access.log</code></pre>
         <h4>✅ 大概率能走快速路径</h4>
         <ul>
           <li>Ubuntu 20.04/22.04/24.04 等主流现代发行版（内核 ≥ 5.4）</li>
-          <li>coreutils ≥ 8.28（几乎所有现代发行版默认满足）</li>
+          <li>coreutils ≥ 8.28 起就会尝试调用，但生产环境建议 <strong>coreutils ≥ 9.0</strong> 以获得更成熟稳定的支持（<code>cp --version</code> 查看）</li>
           <li>源和目标在同一个 JuiceFS 挂载点 / 同一个 mount pod 下</li>
           <li>普通 runc 容器，未启用自定义受限 seccomp</li>
         </ul>
@@ -522,6 +522,7 @@ grep copy_file_range /var/log/access.log</code></pre>
           <li>通过 S3 网关 / WebDAV / NFS·SMB 网关 / Hadoop SDK 访问</li>
           <li>Pod 跑在 gVisor（<code>runsc</code>）等 sandbox 运行时里</li>
           <li>加固过的 seccomp profile 未放行 <code>copy_file_range</code></li>
+          <li><strong>工具</strong>：<code>cp</code> 不是 GNU coreutils ≥ 9.0（<code>cp --version</code> 查看），或者压根没用 <code>cp</code>——<code>dd</code>、<code>cat &gt; </code>、不带特殊参数的 <code>rsync</code>、<code>busybox cp</code> 等都不会触发 <code>copy_file_range</code>，走的是普通 read/write</li>
         </ul>
       </div>
     </div>
