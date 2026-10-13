@@ -1,6 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
-<head>
+<html lang="zh-CN"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>为什么 cp 22GB 文件是瞬间完成的？copy_file_range 在 JuiceFS 上的四层门槛与实锤验证 · 2026-09</title>
@@ -224,7 +223,7 @@
 <div class="hero">
   <div class="hero-inner">
     <div class="hero-tag">🔍 原理调查报告</div>
-    <h1>为什么 cp 22GB 文件是瞬间完成的？<br>copy_file_range 在 JuiceFS 上的四层门槛与实锤验证</h1>
+    <h1>为什么 cp 22GB 文件是瞬间完成的？？<br>copy_file_range 在 JuiceFS 上的四层门槛与实锤验证</h1>
     <p>从一次 22GB 文件 <code>cp</code> 秒级完成的现象出发，拆解 copy_file_range 涉及的内核 / glibc / coreutils / JuiceFS 客户端四层支持要求，用 accesslog 逐字段验证，并延伸到容器 / Kubernetes Pod 场景下的额外变量</p>
     <div class="hero-meta">
       <span>📅 <strong>2026-09-09</strong></span>
@@ -347,9 +346,9 @@
       <strong>⚠ 一个有趣的对照：juicefs sync 更保守</strong>
       同一个代码仓库里，<code>juicefs sync file:// file://</code>（Go 实现）对这个 syscall 反而更谨慎——只有内核 ≥ 5.3 才会尝试调用，原因是 Go 标准库自己就不信任 5.3 之前的跨文件系统语义：
       <pre style="margin-top:10px"><code>// copy_file_range() system call first appeared in Linux 4.5, and reworked in 5.3
-// Go requires kernel >= 5.3 to use copy_file_range(), see:
+// Go requires kernel &gt;= 5.3 to use copy_file_range(), see:
 // https://github.com/golang/go/blob/go1.17.11/src/internal/poll/copy_file_range_linux.go#L58-L66
-if major > 5 || (major == 5 && minor >= 3) {
+if major &gt; 5 || (major == 5 &amp;&amp; minor &gt;= 3) {
     ...
     object.TryCFR = true
 }</code></pre>
@@ -607,7 +606,7 @@ grep copy_file_range /var/log/access.log</code></pre>
 </div>
 
 <!-- live-edit:start v1 -->
-<style data-le-ui>
+<style data-le-ui="">
 #le-root{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue","Microsoft YaHei",sans-serif}
 #le-root .le-hint{position:fixed;left:12px;bottom:12px;z-index:2147483000;font-size:12px;color:#8b8578;background:rgba(255,255,255,.75);
   border-radius:99px;padding:3px 10px;user-select:none;pointer-events:none}
@@ -623,12 +622,12 @@ html.le-editing #le-root .le-bar{display:flex}
 #le-root .le-toast.on{opacity:1}
 html.le-editing [contenteditable] :hover{outline:1px dashed rgba(40,73,214,.45);outline-offset:3px}
 </style>
-<div id="le-root" data-le-ui data-le-version="" data-gh-owner="jerrycaimin" data-gh-repo="jerrycaimin.github.io" data-gh-branch="main" data-site="https://jerrycaimin.github.io/">
+<div id="le-root" data-le-ui="" data-le-version="mv6qwzuw" data-gh-owner="jerrycaimin" data-gh-repo="jerrycaimin.github.io" data-gh-branch="main" data-site="https://jerrycaimin.github.io/">
   <div class="le-hint">E 编辑</div>
   <div class="le-bar"><span class="le-state">编辑模式：直接点文字修改</span><button data-act="save">保存本地 ⌘S</button><button data-act="pub" class="le-pri">发布上线 ⌘⇧S</button><button data-act="exit">退出 ⌥E</button></div>
   <div class="le-toast"></div>
 </div>
-<script data-le-ui>
+<script data-le-ui="">
 /* live-edit v1 — in-page edit, local save, publish to GitHub Pages. Docs: ~/.agents/skills/html-live-edit/SKILL.md */
 (function(){
   if(window.__liveEdit)return;window.__liveEdit=true;
@@ -801,5 +800,6 @@ html.le-editing [contenteditable] :hover{outline:1px dashed rgba(40,73,214,.45);
 })();
 </script>
 <!-- live-edit:end -->
-</body>
-</html>
+
+
+</body></html>
