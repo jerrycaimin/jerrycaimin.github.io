@@ -123,7 +123,7 @@ td.o{color:#ffc9cf}td.n{color:#c9fbe9}
 </section>
 
 <!-- 2 JuiceFS 方案 -->
-<section class="slide" data-notes="<b>JuiceFS 只用 10 秒回顾：</b>数据在对象存储、元数据独立、客户端提供完整 POSIX、本地盘池化成分布式缓存。<br><b>方案核心：</b>① 不新增硬件：每台 GPU 的 14TB 本地盘贡献出来（50 台 ≈ 700TB），加上 700TB 全闪，合计 1.4PB 热存组成<b>一个缓存池</b>；② 全量 16PB 数据只有一份，就在 OSS 里，业务看到统一的 /jfs；③ 不用再拷贝：读取时自动缓存，容量满了按 LRU 淘汰；也可以对指定目录主动<b>预热</b>。<br><b>关于全闪 NFS：</b>最好是把 JuiceFS 缓存节点直接部署在全闪服务器上、用它的本地盘作为 cache-dir，不建议『NFS 挂载目录再当缓存盘』（多一层网络文件系统，且 statfs 可能阻塞）。需要确认全闪的形态。<br><b>关于 10PB 对 1.4PB：</b>要诚实讲——热存装不下全量，不可能做到 10PB 全热。我们的思路是：缓存池里一个 block 只需要从 OSS 读 1 次，其余节点从缓存池 P2P 获取；读重复度越高、业务越能顺序/按批次预取，OSS 的 21GB/s 越不是瓶颈。我们不承诺把 21GB/s 变成更大，而是『少读重复数据』，把宝贵的 OSS 带宽留给真正的冷数据。">
+<section class="slide" data-notes="<b>JuiceFS 只用 10 秒回顾：</b>数据在对象存储、元数据独立、客户端提供完整 POSIX、本地盘池化成分布式缓存。<br><b>方案核心：</b>① 不新增硬件：每台 GPU 的 14TB 本地盘贡献出来（50 台 ≈ 700TB），加上 700TB 全闪，合计 1.4PB 热存组成<b>一个缓存池</b>；② 全量 16PB 数据只有一份，就在 OSS 里，业务看到统一的 /jfs；③ 不用再拷贝：读取时自动缓存，容量满了按 LRU 淘汰；也可以对指定目录主动<b>预热</b>。<br><b>吞吐怎么算：</b>50 台 GPU 节点各 100Gbps 网卡，再加 10 台机器挂载 700TB 全闪 NFS 作为缓存节点，各 100Gbps；60 × 12.5GB/s ≈ 750GB/s，是 OSS 21GB/s 的约 35 倍。这是按网卡算的理论聚合上限，实际还受本地 NVMe 吞吐（每台 4 块盘通常足够）和全闪 NFS 后端能力（10 台那 125GB/s 部分）约束，POC 时实测。<br><b>关于全闪 NFS：</b>10 台缓存节点把 NFS 挂载目录作为 cache-dir；如果全闪服务器本身能装 JuiceFS 客户端、直接用本地盘会更省一跳。需要确认全闪的形态。<br><b>关于 10PB 对 1.4PB：</b>要诚实讲——热存装不下全量，不可能做到 10PB 全热。我们的思路是：缓存池里一个 block 只需要从 OSS 读 1 次，其余节点从缓存池 P2P 获取；读重复度越高、业务越能顺序/按批次预取，OSS 的 21GB/s 越不是瓶颈。我们不承诺把 21GB/s 变成更大，而是『少读重复数据』，把宝贵的 OSS 带宽留给真正的冷数据。">
   <span class="tag">JuiceFS 方案</span>
   <h2>用 JuiceFS 把 <em>GPU 本地盘 + 全闪</em> 变成一个缓存池</h2>
   <div class="strip">
@@ -139,10 +139,10 @@ td.o{color:#ffc9cf}td.n{color:#c9fbe9}
       </div>
       <div class="arrow">统一挂载 <b>/jfs</b>（POSIX） ↓↑ 读命中 / 自动缓存</div>
       <div class="pool">
-        <div class="t">分布式缓存池 ≈ 1.4 PB 热存</div>
+        <div class="t">分布式缓存池 ≈ 1.4 PB 热存 · 聚合带宽 ≈ 750 GB/s</div>
         <div class="row">
-          <div class="layer ok"><b>GPU 本地盘</b><small>50 × 14TB ≈ 700TB</small></div>
-          <div class="layer ok"><b>700TB 全闪</b><small>由 NFS 中转 → 缓存池一员</small></div>
+          <div class="layer ok"><b>50 台 GPU 节点 · 本地盘</b><small>50 × 14TB ≈ 700TB · 50 × 100Gbps ≈ 625GB/s</small></div>
+          <div class="layer ok"><b>10 台缓存节点 · 挂载全闪 NFS</b><small>700TB · 10 × 100Gbps ≈ 125GB/s</small></div>
         </div>
         <div class="arrow" style="margin-top:.6vh">LRU 自动淘汰 · 指定目录可预热 · 节点间 P2P</div>
       </div>
@@ -151,7 +151,8 @@ td.o{color:#ffc9cf}td.n{color:#c9fbe9}
     </div>
     <div style="display:flex;flex-direction:column;gap:1.2vh">
       <div class="card good"><h3>热数据：缓存池直出</h3>
-        <p>多节点聚合带宽，<b>随节点数线性扩展</b>，不再受 OSS 21GB/s 限制</p></div>
+        <div class="num g">≈ 750 GB/s<small>60 × 100Gbps，约 OSS 的 35 倍</small></div>
+        <p>聚合带宽<b>随缓存节点数线性扩展</b>，不再受 OSS 21GB/s 限制</p></div>
       <div class="card good"><h3>冷数据：代理拉取 + P2P</h3>
         <p>多个客户端要同一数据，<b>只向 OSS 读 1 次</b>，缓存池内 P2P 分发，节省宝贵的 OSS 带宽</p></div>
       <div class="card good"><h3>无需拷贝 / 无需清理</h3>
@@ -161,7 +162,7 @@ td.o{color:#ffc9cf}td.n{color:#c9fbe9}
 </section>
 
 <!-- 3 对比 + 降本增效 -->
-<section class="slide" data-notes="<b>结论页。</b>先看表：核心变化是把『人工搬运的两级存储』变成『自动分层的一个文件系统』。<br><b>降本：</b>① 复用 GPU 本地盘，不增购存储；② 全闪不再只做中转，而是缓存池的一部分；③ 少读重复数据，OSS 带宽/请求费更省；④ 减少搬运产生的重复副本。<br><b>增效：</b>① 去掉搬运与清理的人力和等待；② 缓存预热开训即热；③ 数据只有一份，一致性管理简单。<br><b>坦诚的边界：</b>1.4PB 对 10PB+，如果一个 epoch 真的要把 10PB 都冷读一遍，21GB/s 理论上仍是约 5.5 天，所以关键看<b>数据重复度</b>（多 epoch、多任务共享同一批数据）、以及<b>业务能否提前告诉我们要读什么</b>（按训练顺序预取）。这是 POC 里要实测的指标：缓存命中率、OSS 回源带宽。<br><b>下一步：</b>一个小规模 POC，用真实训练任务看命中率和回源带宽。">
+<section class="slide" data-notes="<b>结论页。</b>吞吐一句话：热数据 750GB/s（60 × 100Gbps 理论聚合），冷数据仍是 OSS 21GB/s，但同一份数据只回源一次。先看表：核心变化是把『人工搬运的两级存储』变成『自动分层的一个文件系统』。<br><b>降本：</b>① 复用 GPU 本地盘，不增购存储；② 全闪不再只做中转，而是缓存池的一部分；③ 少读重复数据，OSS 带宽/请求费更省；④ 减少搬运产生的重复副本。<br><b>增效：</b>① 去掉搬运与清理的人力和等待；② 缓存预热开训即热；③ 数据只有一份，一致性管理简单。<br><b>坦诚的边界：</b>1.4PB 对 10PB+，如果一个 epoch 真的要把 10PB 都冷读一遍，21GB/s 理论上仍是约 5.5 天，所以关键看<b>数据重复度</b>（多 epoch、多任务共享同一批数据）、以及<b>业务能否提前告诉我们要读什么</b>（按训练顺序预取）。这是 POC 里要实测的指标：缓存命中率、OSS 回源带宽。<br><b>下一步：</b>一个小规模 POC，用真实训练任务看命中率和回源带宽。">
   <span class="tag">对比 · 降本增效</span>
   <h2>原方案 vs JuiceFS：<em>自动分层</em>，少读重复数据</h2>
   <table>
@@ -170,12 +171,12 @@ td.o{color:#ffc9cf}td.n{color:#c9fbe9}
     <tr><td>热存容量</td><td class="o">仅 700TB 全闪，GPU 本地盘闲置</td><td class="n">本地盘 700TB + 全闪 700TB ≈ <b>1.4PB</b></td></tr>
     <tr><td>数据准备</td><td class="o">训练前手工拷贝，训练后手工删除</td><td class="n">读时自动缓存；目录预热；LRU 淘汰</td></tr>
     <tr><td>冷数据读取</td><td class="o">各节点各自读 OSS，上限 21GB/s</td><td class="n">缓存池代理拉取，<b>同数据只读 OSS 一次</b>，P2P 分发</td></tr>
-    <tr><td>吞吐扩展</td><td class="o">OSS 带宽固定；NFS 受服务端上限</td><td class="n">热数据随缓存节点数线性扩展</td></tr>
+    <tr><td>读取吞吐</td><td class="o">OSS 上限 <b>21GB/s</b>；NFS 受服务端上限</td><td class="n">热数据 <b>≈ 750GB/s</b>（60 节点 × 100Gbps，约 35×），随节点数线性扩展；冷数据仍为 OSS 21GB/s，但不重复读</td></tr>
     <tr><td>运维</td><td class="o">搬运脚本、容量清理、两套权限</td><td class="n">一套文件系统，元数据统一管理</td></tr>
   </table>
   <div class="grid g3" style="margin-top:1.4vh">
     <div class="card good"><h3>降本</h3><p>复用闲置本地盘 · 全闪不再只是中转 · 减少重复回源与重复副本</p></div>
-    <div class="card good"><h3>增效</h3><p>去掉搬运/清理等待 · 预热后开训即热 · 数据单副本、管理简单</p></div>
+    <div class="card good"><h3>增效</h3><p>热读 <b>21 → 750GB/s</b> · 去掉搬运/清理等待 · 预热后开训即热 · 数据单副本</p></div>
     <div class="card"><h3>关键判断指标（POC 实测）</h3><p>缓存命中率 · OSS 回源带宽 · 数据重复度 · 业务可否提前预读</p></div>
   </div>
   <div class="ask"><b>坦诚的边界：</b>热存 1.4PB 对训练集 10PB+ 仍不是全热。JuiceFS 做的是<b>“不读重复数据”</b>，而非提高 OSS 上限——效果取决于数据重复度与读取模式。<b>想与你们确认：</b>一个 epoch 的重复读占比？训练能否按批次提前告知读取目录？700TB 全闪的部署形态？</div>
