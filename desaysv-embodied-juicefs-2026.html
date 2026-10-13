@@ -1,6 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
-<head>
+<html lang="zh-CN"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>具身训练存储：现有方案 vs JuiceFS · 德赛西威交流</title>
@@ -136,18 +135,18 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
 </head>
 <body>
 <div class="bar" id="bar"></div>
-<div class="hint" id="hint">← → 翻页 · N 讲稿 · E 编辑 · ⌘S 保存 · F 全屏</div>
+<div class="hint" id="hint">← → 翻页 · N 讲稿 · E 编辑 · ⌘S 保存 · F 全屏（输入时用 ⌥N / ⌥E）</div>
 <div class="pager"><button id="prev" title="上一页">‹</button><span id="pg"></span><button id="next" title="下一页">›</button></div>
 <div class="notes" id="notes"><b>讲稿：</b><div id="notesBody"></div></div>
 <div class="toast" id="toast"></div>
-<div class="editbar"><span>编辑模式：直接点文字修改</span><button id="btnNotes">讲稿</button><button class="pri" id="btnSave">保存 ⌘S</button><button id="btnExit">退出 E</button></div>
+<div class="editbar"><span id="saveState">编辑模式：直接点文字修改</span><button id="btnNotes">讲稿 ⌥N</button><button class="pri" id="btnSave">保存 ⌘S</button><button id="btnExit">退出 ⌥E</button></div>
 
 <div class="stage" id="stage">
 
 <!-- 1 现状 -->
-<section class="slide s1" data-notes="<b>开场先对齐现状，让客户确认我们理解对了。</b>图上三层：GPU 集群（假设约 50 台，每台 4×3.5TB 本地盘，目前没被利用）、700TB 全闪 NFS（训练前临时搬数据用）、16PB OSS（全量数据，混闪，支持 NFS）。<br><b>三个数字：</b>① 5.5 天：OSS 带宽上限 21GB/s，10PB 冷读一遍约 47.6 万秒；② 7%：全闪 700TB 只覆盖 10PB+ 训练数据的约 7%；③ 700TB：GPU 本地盘一直闲置。<br><b>搬运之痛：</b>每轮训练都要先拷进全闪、训练完再删，耗时耗人，数据还在两处。<br><b>要确认：</b>GPU 节点数量与本地盘是否确实空闲；全闪 NFS 的形态（几台服务器）。">
+<section class="slide s1" data-notes="&lt;b&gt;开场先对齐现状，让客户确认我们理解对了。&lt;/b&gt;图上三层：GPU 集群（假设约 50 台，每台 4×3.5TB 本地盘，目前没被利用）、700TB 全闪 NFS（训练前临时搬数据用）、16PB OSS（全量数据，混闪，支持 NFS）。&lt;br&gt;&lt;b&gt;三个数字：&lt;/b&gt;① 5.5 天：OSS 带宽上限 21GB/s，10PB 冷读一遍约 47.6 万秒；② ♾️ 反复搬运：每轮训练都要先拷进全闪 NFS、训练完再删，耗时耗人，数据还在两处（顺带一提：全闪 700TB 只覆盖 10PB+ 训练数据的约 7%）；③ 700TB：GPU 本地盘一直闲置。&lt;br&gt;&lt;b&gt;要确认：&lt;/b&gt;GPU 节点数量与本地盘是否确实空闲；全闪 NFS 的形态（几台服务器）。">
   <div class="rise"><div class="kicker"><i>01</i> · 现状</div>
-  <h2>16PB 数据，只靠一根 <span class="hl-bad">21 GB/s</span> 的管子</h2>
+  <h2>16PB 原始数据，训练性能依赖&nbsp;<span class="hl-bad">21 GB/s</span> 的对象存储</h2>
   <p class="lead">热数据要人工搬进全闪、训练完再删掉；GPU 节点上的本地盘却一直闲着。</p></div>
   <div class="cols">
     <div class="flow rise" style="--d:.15s">
@@ -155,12 +154,12 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
       <div class="cap"><b>GPU 集群 · 约 50 台</b><span class="tagp amber">本地盘 700TB 闲置</span><br>每台 3.5TB × 4 = 14TB</div>
       <div class="vline dash"><span>NFS 读取</span></div>
       <div class="soft amber"><b>700TB 全闪 NFS</b><span class="cycle">搬入 → 训练 → 删除 ↺</span></div>
-      <div class="vline" style="--c:var(--coral)"><span style="color:var(--coral)">人工搬运，受限于 21GB/s</span></div>
+      <div class="vline" style="--c:var(--coral)"><span style="color:var(--coral)">人工S3搬运，受限于 21GB/s</span></div>
       <div class="soft slate"><b>16PB OSS</b>混闪 · 全量数据 · 带宽上限 21GB/s</div>
     </div>
     <div class="stats rise" style="--d:.3s">
       <div class="stat"><div class="n bad">5.5<small>天</small></div><p>按 21GB/s 冷读一遍 10PB 训练数据</p></div>
-      <div class="stat"><div class="n bad">7<small>%</small></div><p>全闪 700TB 对 10PB+ 训练数据的覆盖率</p></div>
+      <div class="stat"><div class="n bad">♾️</div><p>反复搬运和删除NFS上的数据，费时费力</p></div>
       <div class="stat"><div class="n bad">700<small>TB</small></div><p>GPU 本地盘容量，目前没有用起来</p></div>
     </div>
   </div>
@@ -168,7 +167,7 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
 </section>
 
 <!-- 2 JuiceFS 方案 -->
-<section class="slide s2" data-notes="<b>JuiceFS 只用 10 秒回顾：</b>数据在对象存储、元数据独立、客户端完整 POSIX、本地盘池化成分布式缓存。<br><b>方案核心：</b>① 50 台 GPU 的本地盘（≈700TB）+ 10 台挂载 700TB 全闪 NFS 的缓存节点，合计 1.4PB 组成一个缓存池；② 全量 16PB 只在 OSS 一份，业务看到统一 /jfs；③ 不再拷贝：读时自动缓存，满了 LRU 淘汰，也可对目录主动预热。<br><b>吞吐怎么算：</b>60 台 × 100Gbps ≈ 60 × 12.5GB/s ≈ 750GB/s，约 OSS 的 35 倍。这是按网卡算的理论聚合上限，实际还受本地 NVMe 和全闪 NFS 后端能力约束，POC 实测。<br><b>关于 10PB 对 1.4PB：</b>诚实讲热存装不下全量。思路是同一个 block 只回源 OSS 一次，其余节点从缓存池 P2P 获取；读重复度越高、业务越能提前预取，21GB/s 越不是瓶颈。">
+<section class="slide s2" data-notes="&lt;b&gt;JuiceFS 只用 10 秒回顾：&lt;/b&gt;数据在对象存储、元数据独立、客户端完整 POSIX、本地盘池化成分布式缓存。&lt;br&gt;&lt;b&gt;方案核心：&lt;/b&gt;① 50 台 GPU 的本地盘（≈700TB）+ 10 台挂载 700TB 全闪 NFS 的缓存节点，合计 1.4PB 组成一个缓存池；② 全量 16PB 只在 OSS 一份，业务看到统一 /jfs；③ 不再拷贝：读时自动缓存，满了 LRU 淘汰，也可对目录主动预热。&lt;br&gt;&lt;b&gt;吞吐怎么算：&lt;/b&gt;60 台 × 100Gbps ≈ 60 × 12.5GB/s ≈ 750GB/s，约 OSS 的 35 倍。这是按网卡算的理论聚合上限，实际还受本地 NVMe 和全闪 NFS 后端能力约束，POC 实测。&lt;br&gt;&lt;b&gt;关于 10PB 对 1.4PB：&lt;/b&gt;诚实讲热存装不下全量。思路是同一个 block 只回源 OSS 一次，其余节点从缓存池 P2P 获取；读重复度越高、业务越能提前预取，21GB/s 越不是瓶颈。">
   <div class="rise"><div class="kicker"><i>02</i> · JuiceFS 方案</div>
   <h2>把闲置本地盘和全闪，变成一个 <span class="hl-good">750 GB/s</span> 的缓存池</h2>
   <p class="ribbon"><span>数据在对象存储</span><span>元数据独立集群</span><span>完整 POSIX，训练代码零改造</span><span>节点间 P2P 分发</span></p></div>
@@ -196,7 +195,7 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
 </section>
 
 <!-- 3 对比 -->
-<section class="slide s3" data-notes="<b>结论页。</b>核心变化：把『人工搬运的两层存储』变成『自动分层的一个文件系统』。<br><b>降本：</b>复用 GPU 本地盘、全闪不再只做中转、少读重复数据省 OSS 带宽和请求、减少搬运产生的重复副本。<br><b>增效：</b>热读 21 → 750GB/s；去掉搬运和清理的人力与等待；预热后开训即热；数据单副本，一致性简单。<br><b>坦诚的边界：</b>如果一个 epoch 真要把 10PB 都冷读一遍，21GB/s 理论上仍约 5.5 天。关键看数据重复度（多 epoch、多任务共享）、业务能否提前告知读取目录。POC 里实测缓存命中率、OSS 回源带宽。<br><b>下一步：</b>小规模 POC，用真实训练任务验证。">
+<section class="slide s3" data-notes="&lt;b&gt;结论页。&lt;/b&gt;核心变化：把『人工搬运的两层存储』变成『自动分层的一个文件系统』。&lt;br&gt;&lt;b&gt;降本：&lt;/b&gt;复用 GPU 本地盘、全闪不再只做中转、少读重复数据省 OSS 带宽和请求、减少搬运产生的重复副本。&lt;br&gt;&lt;b&gt;增效：&lt;/b&gt;热读750GB/s；去掉搬运和清理的人力与等待；预热后开训即热；数据单副本，一致性简单。&lt;br&gt;&lt;b&gt;坦诚的边界：&lt;/b&gt;如果一个 epoch 真要把 10PB 都冷读一遍，21GB/s 理论上仍约 5.5 天。关键看数据重复度（多 epoch、多任务共享）、业务能否提前告知读取目录。POC 里实测缓存命中率、OSS 回源带宽。&lt;br&gt;&lt;b&gt;下一步：&lt;/b&gt;小规模 POC，用真实训练任务来验证，只要重复读取数据存在，JuiceFS一定能有大幅的帮助。">
   <div class="rise"><div class="kicker"><i>03</i> · 对比与价值</div>
   <h2>从「人工搬运的两层存储」到「<span class="hl-good">自动分层</span>」</h2>
   <p class="lead">一个文件系统、一份数据：热的在缓存池，冷的在 OSS，不再人工搬运。</p></div>
@@ -204,14 +203,14 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
     <div class="r hd"><div></div><div class="o">现有方案</div><div></div><div class="v">JuiceFS 方案</div></div>
     <div class="r"><div class="k">数据入口</div><div class="o">OSS 与 NFS 两个入口，数据两份</div><div class="a">→</div><div class="v">统一 /jfs，POSIX，一份数据</div></div>
     <div class="r"><div class="k">热存容量</div><div class="o">仅 700TB 全闪，本地盘闲置</div><div class="a">→</div><div class="v">本地盘 + 全闪 ≈ <em>1.4PB</em></div></div>
-    <div class="r"><div class="k">读取吞吐</div><div class="o">OSS 上限 21GB/s</div><div class="a">→</div><div class="v">热数据 ≈ <em>750GB/s</em>，随节点数线性扩展</div></div>
+    <div class="r"><div class="k">读取吞吐</div><div class="o">OSS 上限 21GB/s + NFS 读取上限</div><div class="a">→</div><div class="v">热数据 ≈ <em>750GB/s</em>，随节点数线性扩展</div></div>
     <div class="r"><div class="k">数据准备</div><div class="o">训练前手工拷贝，训练后手工删除</div><div class="a">→</div><div class="v">读时自动缓存 · 目录预热 · LRU 淘汰</div></div>
     <div class="r"><div class="k">冷数据</div><div class="o">各节点各自读 OSS，重复回源</div><div class="a">→</div><div class="v">缓存节点代理拉取，同一数据<em>只回源 1 次</em></div></div>
   </div>
   <div class="tri rise" style="--d:.3s">
-    <div><h3>降本</h3><p>复用闲置本地盘<br>全闪从中转变成缓存池<br>减少重复回源与重复副本</p></div>
-    <div><h3>增效</h3><p>热读 <b>21 → 750GB/s</b><br>去掉搬运与清理的等待<br>预热后开训即热</p></div>
-    <div class="note"><h3>坦诚的边界</h3><p>1.4PB 热存对 10PB+ 训练数据仍不是全热。JuiceFS 做的是<b>不读重复数据</b>，效果取决于数据重复度与读取模式——POC 实测命中率与回源带宽。</p></div>
+    <div><h3>降本</h3><p>复用闲置本地盘<br>全闪NFS从中转变成缓存池的一部分<br>杜绝人工重复拷贝，热存永远是对象存储的子集</p></div>
+    <div><h3>增效</h3><p>热读 <b>从依赖NFS到750GB/s</b><br>去掉搬运与清理的等待<br>预热后开训即热</p></div>
+    <div class="note"><h3>坦诚的边界</h3><p>1.4PB 热存对 10PB+ 训练数据仍不是全热。JuiceFS 做的是<b>不读重复数据</b>，效果取决于数据重复度与读取模式——POC 实测命中率与回源带宽。只要重复读取数据存在，JuiceFS一定能有大幅的帮助。</p></div>
   </div>
 </section>
 
@@ -224,7 +223,8 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
   var bar=document.getElementById('bar'),pg=document.getElementById('pg');
   var notes=document.getElementById('notes'),notesBody=document.getElementById('notesBody');
   var toastEl=document.getElementById('toast');
-  var cur=0,editing=false,dirty=false,fileHandle=null;
+  var cur=0,editing=false,dirty=false,fileHandle=null,autoTimer=null;
+  var saveState=document.getElementById('saveState');
 
   function fit(){stage.style.setProperty('--s',Math.min(innerWidth/1600,innerHeight/900))}
   addEventListener('resize',fit);fit();
@@ -244,11 +244,17 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
   function setEdit(on){
     editing=on;document.body.classList.toggle('editing',on);
     slides.forEach(function(s){if(on)s.setAttribute('contenteditable','true');else s.removeAttribute('contenteditable')});
-    if(on){notesBody.setAttribute('contenteditable','true');notes.classList.add('on')}else notesBody.removeAttribute('contenteditable');
-    toast(on?'编辑模式：点击文字直接修改，⌘S 保存':'已退出编辑'+(dirty?'（有未保存修改）':''));
+    if(on)notesBody.setAttribute('contenteditable','true');
+    else{notesBody.removeAttribute('contenteditable');notes.classList.remove('on');if(document.activeElement)document.activeElement.blur()}
+    if(!on&&dirty){save();return}
+    toast(on?'编辑模式：点文字修改，修改会自动保存':'已退出编辑');
   }
-  stage.addEventListener('input',function(){dirty=true});
-  notesBody.addEventListener('input',function(){slides[cur].dataset.notes=notesBody.innerHTML;dirty=true});
+  function markDirty(){
+    dirty=true;saveState.textContent='未保存…';
+    clearTimeout(autoTimer);autoTimer=setTimeout(function(){save(true)},1500);
+  }
+  stage.addEventListener('input',markDirty);
+  notesBody.addEventListener('input',function(){slides[cur].dataset.notes=notesBody.innerHTML;markDirty()});
   document.addEventListener('paste',function(e){
     if(!editing)return;e.preventDefault();
     document.execCommand('insertText',false,(e.clipboardData||window.clipboardData).getData('text/plain'));
@@ -263,20 +269,55 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
     root.querySelector('#notesBody').innerHTML='';
     root.querySelector('#notes').className='notes';
     root.querySelector('#toast').className='toast';
+    root.querySelector('#toast').textContent='';
+    root.querySelector('#saveState').textContent='编辑模式：直接点文字修改';
     root.querySelector('#hint').className='hint';
     root.querySelector('#bar').removeAttribute('style');
     root.querySelector('#pg').textContent='';
     return '<!DOCTYPE html>\n'+root.outerHTML+'\n';
   }
-  async function save(){
+  // file handle is kept in IndexedDB so the file picker is only needed once
+  function idb(mode,val){
+    return new Promise(function(res){
+      try{
+        var r=indexedDB.open('deck-save',1);
+        r.onupgradeneeded=function(){r.result.createObjectStore('h')};
+        r.onsuccess=function(){
+          var st=r.result.transaction('h',mode?'readwrite':'readonly').objectStore('h');
+          var q=mode?st.put(val,location.pathname):st.get(location.pathname);
+          q.onsuccess=function(){res(q.result)};q.onerror=function(){res(null)};
+        };
+        r.onerror=function(){res(null)};
+      }catch(e){res(null)}
+    });
+  }
+  idb(0).then(function(h){if(h)fileHandle=h});
+
+  // quiet=true: autosave, never opens a picker or prompt (no user gesture available)
+  async function save(quiet){
+    clearTimeout(autoTimer);
     var html=serialize(),name=decodeURIComponent(location.pathname.split('/').pop()||'deck.html');
     if(window.showSaveFilePicker){
       try{
-        if(!fileHandle)fileHandle=await showSaveFilePicker({suggestedName:name,types:[{description:'HTML',accept:{'text/html':['.html']}}]});
+        if(fileHandle){
+          var p=await fileHandle.queryPermission({mode:'readwrite'});
+          if(p!=='granted'){
+            if(quiet){saveState.textContent='按 ⌘S 授权后自动保存';toast('需要授权一次：按 ⌘S 或点「保存」');return}
+            if(await fileHandle.requestPermission({mode:'readwrite'})!=='granted')return;
+          }
+        }else{
+          if(quiet){saveState.textContent='首次请按 ⌘S 选择本文件';toast('首次保存：按 ⌘S，选中本 HTML 文件覆盖');return}
+          fileHandle=await showSaveFilePicker({suggestedName:name,types:[{description:'HTML',accept:{'text/html':['.html']}}]});
+          idb(1,fileHandle);
+        }
         var w=await fileHandle.createWritable();await w.write(html);await w.close();
-        dirty=false;toast('已保存到 '+fileHandle.name);return;
+        dirty=false;
+        var t=new Date().toTimeString().slice(0,8);
+        saveState.textContent='已自动保存 '+t;
+        toast('已保存到 '+fileHandle.name+' · '+t);return;
       }catch(e){if(e.name==='AbortError')return;fileHandle=null}
     }
+    if(quiet)return;
     var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([html],{type:'text/html'}));a.download=name;a.click();
     dirty=false;toast('已下载 '+name+'，覆盖原文件即可');
   }
@@ -285,7 +326,10 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
   document.addEventListener('keydown',function(e){
     var k=e.key;
     if((e.metaKey||e.ctrlKey)&&k.toLowerCase()==='s'){e.preventDefault();save();return}
-    if(editing&&e.target.isContentEditable){if(k==='Escape'){e.target.blur();setEdit(false)}return}
+    // ⌥N / ⌥E work even while typing; use e.code because ⌥ changes e.key on macOS
+    if(e.altKey&&e.code==='KeyN'){e.preventDefault();notes.classList.toggle('on');return}
+    if(e.altKey&&e.code==='KeyE'){e.preventDefault();setEdit(!editing);return}
+    if(editing&&e.target.isContentEditable){if(k==='Escape')e.target.blur();return}
     if(['ArrowRight','ArrowDown','PageDown',' ','Enter'].indexOf(k)>-1){e.preventDefault();go(cur+1)}
     else if(['ArrowLeft','ArrowUp','PageUp','Backspace'].indexOf(k)>-1){e.preventDefault();go(cur-1)}
     else if(k==='Home')go(0);
@@ -297,7 +341,7 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
   });
   document.getElementById('next').onclick=function(){go(cur+1)};
   document.getElementById('prev').onclick=function(){go(cur-1)};
-  document.getElementById('btnSave').onclick=save;
+  document.getElementById('btnSave').onclick=function(){save()};
   document.getElementById('btnExit').onclick=function(){setEdit(false)};
   document.getElementById('btnNotes').onclick=function(){notes.classList.toggle('on')};
   var x0=null;
@@ -308,5 +352,8 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
   go((parseInt(location.hash.slice(1),10)||1)-1);
 })();
 </script>
-</body>
-</html>
+
+
+
+
+</body></html>
