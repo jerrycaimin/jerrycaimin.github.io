@@ -336,8 +336,8 @@ window.liveEditBeforeSerialize=function(root){
   root.querySelector('#notes').innerHTML='';
 };
 </script>
-<!-- live-edit:start v1 -->
-<style data-le-ui="">
+<!-- live-edit:start v2 -->
+<style data-le-ui>
 #le-root{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue","Microsoft YaHei",sans-serif}
 #le-root .le-hint{position:fixed;left:12px;bottom:12px;z-index:2147483000;font-size:12px;color:#8b8578;background:rgba(255,255,255,.75);
   border-radius:99px;padding:3px 10px;user-select:none;pointer-events:none}
@@ -352,14 +352,24 @@ html.le-editing #le-root .le-bar{display:flex}
   padding:9px 18px;border-radius:99px;opacity:0;transition:opacity .3s;pointer-events:none}
 #le-root .le-toast.on{opacity:1}
 html.le-editing [contenteditable] :hover{outline:1px dashed rgba(40,73,214,.45);outline-offset:3px}
+#le-root .le-notes{position:fixed;left:0;right:0;bottom:0;z-index:2147483000;display:none;max-height:42vh;overflow:auto;
+  background:rgba(20,27,43,.95);color:#f3e7cc;padding:16px 6vw 22px;font-size:17px;line-height:1.8;box-shadow:0 -10px 40px rgba(0,0,0,.2)}
+#le-root .le-notes.on{display:block}
+html.le-editing #le-root .le-notes{padding-bottom:70px}
+#le-root .le-notes-h{font-size:13px;letter-spacing:.12em;color:#f2b544;font-weight:700;margin-bottom:6px}
+#le-root .le-notes-b{min-height:1.8em;outline:none}
+#le-root .le-notes-b b,#le-root .le-notes-b strong{color:#fff}
+#le-root .le-notes-b:empty::before{content:attr(data-ph);color:#8d8a80}
+html.le-editing #le-root .le-notes-b{outline:1px dashed rgba(242,181,68,.6);outline-offset:4px}
 </style>
-<div id="le-root" data-le-ui="" data-le-hint="off" data-le-version="mv6r0ogl" data-gh-owner="jerrycaimin" data-gh-repo="jerrycaimin.github.io" data-gh-branch="main" data-site="https://jerrycaimin.github.io/">
-  <div class="le-hint">E 编辑</div>
-  <div class="le-bar"><span class="le-state">编辑模式：直接点文字修改</span><button data-act="save">保存本地 ⌘S</button><button data-act="pub" class="le-pri">发布上线 ⌘⇧S</button><button data-act="exit">退出 ⌥E</button></div>
+<div id="le-root" data-le-ui="" data-le-version="mv6r0ogl" data-gh-owner="jerrycaimin" data-gh-repo="jerrycaimin.github.io" data-gh-branch="main" data-site="https://jerrycaimin.github.io/" data-le-hint="off">
+  <div class="le-hint">N 讲稿 · E 编辑</div>
+  <div class="le-notes"><div class="le-notes-h">讲稿</div><div class="le-notes-b" data-ph="（暂无讲稿，按 E 进入编辑后在这里输入）"></div></div>
+  <div class="le-bar"><span class="le-state">编辑模式：直接点文字修改</span><button data-act="notes">讲稿 ⌥N</button><button data-act="save">保存本地 ⌘S</button><button data-act="pub" class="le-pri">发布上线 ⌘⇧S</button><button data-act="exit">退出 ⌥E</button></div>
   <div class="le-toast"></div>
 </div>
-<script data-le-ui="">
-/* live-edit v1 — in-page edit, local save, publish to GitHub Pages. Docs: ~/.agents/skills/html-live-edit/SKILL.md */
+<script data-le-ui>
+/* live-edit v2 — in-page edit, speaker notes, local save, publish to GitHub Pages. Docs: ~/.agents/skills/html-live-edit/SKILL.md */
 (function(){
   if(window.__liveEdit)return;window.__liveEdit=true;
   var root=document.getElementById('le-root'),html=document.documentElement;
@@ -380,7 +390,9 @@ html.le-editing [contenteditable] :hover{outline:1px dashed rgba(40,73,214,.45);
   function setEdit(on){
     editing=on;html.classList.toggle('le-editing',on);
     targets().forEach(function(el){if(on)el.setAttribute('contenteditable','true');else el.removeAttribute('contenteditable')});
-    if(!on){if(document.activeElement)document.activeElement.blur();if(dirty)save(true)}
+    if(!on){if(document.activeElement)document.activeElement.blur();notesOn(false);if(dirty)save(true)}
+    else notesBody.setAttribute('contenteditable','true');
+    if(!on)notesBody.removeAttribute('contenteditable');
     toast(on?'编辑模式：点文字直接修改':'已退出编辑');
     window.dispatchEvent(new CustomEvent('liveedit:mode',{detail:{editing:on}}));
   }
@@ -393,6 +405,28 @@ html.le-editing [contenteditable] :hover{outline:1px dashed rgba(40,73,214,.45);
   // pages that change other editable data (e.g. speaker notes in data-* attributes) call this
   window.liveEditMarkDirty=markDirty;
 
+  // speaker notes: stored as HTML in data-notes on the current "scope" element
+  // scope = page hook liveEditNotesTarget() || active slide || #le-root (page-level notes)
+  var notesEl=root.querySelector('.le-notes'),notesBody=root.querySelector('.le-notes-b'),notesHead=root.querySelector('.le-notes-h');
+  var notesScope=null;
+  function scope(){
+    var t=typeof window.liveEditNotesTarget==='function'&&window.liveEditNotesTarget();
+    return t||document.querySelector('.slide.active,section.active,[data-le-notes-scope].active')||root;
+  }
+  function renderNotes(){
+    if(!notesEl.classList.contains('on')||notesBody.contains(document.activeElement))return;
+    notesScope=scope();
+    notesBody.innerHTML=notesScope.getAttribute('data-notes')||'';
+    notesHead.textContent=notesScope===root?'讲稿 · 本页':'讲稿 · 当前页';
+  }
+  function notesOn(on){notesEl.classList.toggle('on',on);if(on)renderNotes()}
+  function toggleNotes(){if(root.dataset.leNotes!=='off')notesOn(!notesEl.classList.contains('on'))}
+  notesBody.addEventListener('input',function(){if(notesScope)notesScope.setAttribute('data-notes',notesBody.innerHTML)});
+  // follow slide changes made by the page's own navigation
+  var mo=new MutationObserver(function(){if(notesEl.classList.contains('on')&&scope()!==notesScope)renderNotes()});
+  mo.observe(document.body,{attributes:true,attributeFilter:['class'],subtree:true});
+  addEventListener('hashchange',renderNotes);
+
   function serialize(ver){
     var r=html.cloneNode(true);
     r.classList.remove('le-editing');if(!r.getAttribute('class'))r.removeAttribute('class');
@@ -401,6 +435,9 @@ html.le-editing [contenteditable] :hover{outline:1px dashed rgba(40,73,214,.45);
     if(ver)lr.setAttribute('data-le-version',ver);
     lr.querySelector('.le-toast').className='le-toast';lr.querySelector('.le-toast').textContent='';
     lr.querySelector('.le-state').textContent=STATE0;
+    lr.querySelector('.le-notes').className='le-notes';
+    lr.querySelector('.le-notes-b').innerHTML='';
+    lr.querySelector('.le-notes-h').textContent='讲稿';
     // page hook: undo runtime DOM changes (active classes, inline styles, generated nodes) before saving
     if(typeof window.liveEditBeforeSerialize==='function')window.liveEditBeforeSerialize(r);
     return '<!DOCTYPE html>\n'+r.outerHTML+'\n';
@@ -520,10 +557,13 @@ html.le-editing [contenteditable] :hover{outline:1px dashed rgba(40,73,214,.45);
     if(mod&&e.shiftKey&&e.code==='KeyS'){take();publish();return}
     if(mod&&!e.shiftKey&&e.code==='KeyS'){take();save();return}
     if(e.altKey&&e.code==='KeyE'){take();setEdit(!editing);return}
+    if(e.altKey&&e.code==='KeyN'){take();toggleNotes();return}
     if(editing&&typing){if(k==='Escape'){t.blur();take()}else if(!mod&&!e.altKey)e.stopImmediatePropagation();return}
     if(!typing&&!mod&&!e.altKey&&(k==='e'||k==='E')){take();setEdit(!editing);return}
+    if(!typing&&!mod&&!e.altKey&&(k==='n'||k==='N')&&root.dataset.leNotes!=='off'){take();toggleNotes();return}
     if(editing&&k==='Escape'){take();setEdit(false)}
   },true);
+  root.querySelector('[data-act=notes]').onclick=toggleNotes;
   root.querySelector('[data-act=save]').onclick=function(){save()};
   root.querySelector('[data-act=pub]').onclick=publish;
   root.querySelector('[data-act=exit]').onclick=function(){setEdit(false)};
