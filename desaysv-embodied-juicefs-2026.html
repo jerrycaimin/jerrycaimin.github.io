@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>具身训练存储：现有方案 vs JuiceFS · 德赛西威交流</title>
+<style>
+:root{
+  --bg:#0b1020;--card:#172042;--line:#2a3766;
+  --fg:#e8ecff;--muted:#9aa6d6;--accent:#4f8cff;--accent2:#22d3a6;--warn:#ffb454;--bad:#ff6b7a;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--fg);
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue","Microsoft YaHei",sans-serif}
+.deck{position:fixed;inset:0}
+.slide{position:absolute;inset:0;padding:5vh 5vw 8vh;display:flex;flex-direction:column;justify-content:center;
+  opacity:0;pointer-events:none;transform:translateY(14px);transition:opacity .35s,transform .35s;
+  background:radial-gradient(1200px 600px at 85% -10%,#1b2a5c 0%,transparent 60%),var(--bg)}
+.slide.active{opacity:1;pointer-events:auto;transform:none}
+.tag{display:inline-block;align-self:flex-start;font-size:clamp(11px,1.1vw,15px);letter-spacing:.12em;
+  color:var(--accent2);border:1px solid var(--accent2);border-radius:99px;padding:3px 14px;margin-bottom:1.4vh}
+h2{font-size:clamp(22px,2.9vw,42px);line-height:1.25;margin-bottom:2vh}
+h2 em{font-style:normal;color:var(--accent)}
+.meta{font-size:clamp(11px,1vw,14px);color:var(--muted);margin-top:1vh}
+.grid{display:grid;gap:1.4vw}
+.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}
+.g-arch{grid-template-columns:1.25fr 1fr}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:1.6vh 1.2vw}
+.card h3{font-size:clamp(15px,1.55vw,22px);margin-bottom:.8vh;color:var(--accent)}
+.card.bad h3{color:var(--bad)}.card.good h3{color:var(--accent2)}
+.card p,.card li{font-size:clamp(12px,1.25vw,18px);line-height:1.6;color:#cfd7ff}
+.card ul{padding-left:1.2em}
+.card b,.big b{color:var(--accent2)}.card.bad b{color:var(--bad)}
+.num{font-size:clamp(24px,3vw,44px);font-weight:700;color:var(--bad);line-height:1.2}
+.num.g{color:var(--accent2)}
+.num small{font-size:.4em;color:var(--muted);font-weight:400;margin-left:.4em}
+/* architecture diagram */
+.arch{display:flex;flex-direction:column;gap:1.2vh;font-size:clamp(12px,1.25vw,18px)}
+.gpus{display:flex;gap:.5vw;align-items:stretch}
+.gpu{flex:1;min-height:7vh;border:2px solid var(--accent);background:#1b2a5c;border-radius:8px;
+  display:flex;align-items:center;justify-content:center;font-size:.7em;color:#cfd7ff;text-align:center;padding:.3vh}
+.dots{align-self:center;color:var(--muted);letter-spacing:.3em}
+.layer{text-align:center;padding:1.3vh .8vw;border-radius:10px;border:2px solid var(--accent);background:#1d2a5a}
+.layer small{display:block;color:var(--muted);font-size:.8em;margin-top:.2em}
+.layer.nfs{width:62%;align-self:center}
+.layer.ok{border-color:var(--accent2);background:#0f3a3a}
+.layer.warn{border-color:var(--warn);background:#3a2f12}
+.layer.bad{border-color:var(--bad);background:#3a1620}
+.arrow{text-align:center;color:var(--muted);font-size:.85em;line-height:1.2}
+.arrow.bad{color:var(--bad)}
+.pool{border:2px dashed var(--accent2);border-radius:12px;padding:1vh .8vw;background:rgba(34,211,166,.06)}
+.pool>.t{text-align:center;color:var(--accent2);font-weight:700;margin-bottom:.8vh}
+.pool .row{display:flex;gap:.6vw}
+.pool .row .layer{flex:1}
+/* strip */
+.strip{display:flex;flex-wrap:wrap;gap:.6vw;margin-bottom:1.6vh}
+.chip{padding:.4vh .9vw;border-radius:99px;background:#1d2a5a;border:1px solid var(--line);font-size:clamp(11px,1.15vw,16px);color:#cfd7ff}
+.chip b{color:var(--accent2)}
+/* flow */
+.flow{display:flex;align-items:stretch;gap:.6vw;margin-top:1.4vh}
+.flow .step{flex:1;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:1vh .6vw;text-align:center;font-size:clamp(11px,1.15vw,16px);line-height:1.45}
+.flow .step small{display:block;color:var(--muted);font-size:.85em;margin-top:.2em}
+.flow .sep{align-self:center;color:var(--accent);font-size:1.4em}
+.ask{border-left:4px solid var(--warn);background:rgba(255,180,84,.08);border-radius:0 10px 10px 0;
+  padding:1.2vh 1.2vw;margin-top:1.6vh;font-size:clamp(11px,1.2vw,17px);line-height:1.65;color:#ffe2b8}
+.ask b{color:var(--warn)}
+table{border-collapse:collapse;width:100%;font-size:clamp(12px,1.2vw,17px)}
+th,td{border:1px solid var(--line);padding:.8vh .8vw;text-align:left;line-height:1.45}
+th{background:var(--card);color:var(--accent)}
+th.n{color:var(--accent2)}th.o{color:var(--bad)}
+td:first-child{color:var(--muted);width:15%;white-space:nowrap}
+td.o{color:#ffc9cf}td.n{color:#c9fbe9}
+/* chrome */
+.bar{position:fixed;left:0;top:0;height:4px;background:linear-gradient(90deg,var(--accent),var(--accent2));width:0;transition:width .3s;z-index:9}
+.pager{position:fixed;right:2vw;bottom:2.4vh;font-size:14px;color:var(--muted);z-index:9;user-select:none}
+.hint{position:fixed;left:2vw;bottom:2.4vh;font-size:13px;color:#5d6aa0;z-index:9}
+.nav{position:fixed;top:0;bottom:0;width:5vw;z-index:5;cursor:pointer}
+.nav.l{left:0}.nav.r{right:0}
+.notes{position:fixed;left:0;right:0;bottom:0;max-height:42vh;overflow:auto;background:#0a0f22f2;border-top:2px solid var(--warn);
+  padding:2vh 6vw;font-size:clamp(13px,1.3vw,19px);line-height:1.75;color:#ffe2b8;z-index:8;display:none}
+.notes.on{display:block}
+.notes b{color:var(--warn)}
+@media (max-width:800px){.g2,.g3,.g-arch{grid-template-columns:1fr}.flow{flex-direction:column}.flow .sep{transform:rotate(90deg)}
+  html,body{overflow:auto}.slide{position:relative;opacity:1;transform:none;pointer-events:auto;min-height:100vh}.deck{position:static}}
+</style>
+</head>
+<body>
+<div class="bar" id="bar"></div>
+<div class="nav l" id="prev"></div><div class="nav r" id="next"></div>
+<div class="hint">← → 翻页 · N 讲稿/备注 · F 全屏</div>
+<div class="pager" id="pager"></div>
+<div class="notes" id="notes"></div>
+
+<div class="deck" id="deck">
+
+<!-- 1 现状 -->
+<section class="slide" data-notes="<b>开场先对齐现状，让客户确认我们理解对了。</b>图上的三层：GPU 集群（假设约 50 台，每台 4×3.5TB 本地盘，目前没有被利用成存储）、700TB 全闪 NFS（训练前临时搬运数据用）、16PB OSS（总数据，混闪，支持 NFS）。<br><b>三个痛点：</b>① OSS 带宽上限 21GB/s，10PB 全量冷读一遍约 5.5 天（10PB ÷ 21GB/s ≈ 47.6 万秒）；② 全闪 NFS 只是『训练前拷进来、训练后删掉』的临时中转，搬运和清理都耗时耗人，还容易出错；③ 全闪只有 700TB，而训练集已是 10PB+，热层与数据集规模差一个数量级。<br><b>要确认：</b>GPU 节点数量与本地盘是否确实空闲；全闪 NFS 的形态（几台服务器、是否能装客户端）。">
+  <span class="tag">现状</span>
+  <h2>现有架构：<em>OSS 带宽不够</em>，全闪靠人工搬运</h2>
+  <div class="grid g-arch">
+    <div class="arch">
+      <div class="gpus">
+        <div class="gpu">GPU<br>节点</div><div class="gpu">GPU<br>节点</div><div class="gpu">GPU<br>节点</div>
+        <span class="dots">···</span>
+        <div class="gpu">GPU<br>节点</div><div class="gpu">GPU<br>节点</div>
+      </div>
+      <div class="arrow">GPU 集群（假设约 50 台）· 每台 3.5TB × 4 = 14TB 本地盘<b style="color:var(--warn)">（目前闲置）</b></div>
+      <div class="arrow">↑ NFS 读（需手工把数据准备好）</div>
+      <div class="layer nfs warn"><b>700TB 全闪 NFS</b><small>训练前临时搬入 → 训练 → 手工删除</small></div>
+      <div class="arrow bad">↑ 手工拷贝 / 搬运（受 OSS 带宽限制）</div>
+      <div class="layer bad"><b>16PB OSS（混闪 · 支持 NFS）</b><small>全量数据 · 带宽上限 <b style="color:var(--bad)">21GB/s</b></small></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:1.2vh">
+      <div class="card bad"><h3>① OSS 带宽是硬上限</h3>
+        <div class="num">21 GB/s<small>→ 冷读 10PB 约 <b style="color:var(--bad)">5.5 天</b></small></div></div>
+      <div class="card bad"><h3>② 全闪靠人工搬运</h3>
+        <p>训练前拷入、训练后删除，<b>搬运与清理都耗时耗人</b>；数据在 OSS 与 NFS 两份，管理割裂</p></div>
+      <div class="card bad"><h3>③ 热层与数据集规模差一个量级</h3>
+        <p>全闪 <b>700TB</b> vs 训练数据 <b>10PB+</b>（热层仅覆盖约 7%）</p></div>
+    </div>
+  </div>
+  <p class="meta">德赛西威 · 具身团队交流 · 2026-10 · <span>👁 <img src="https://hits.sh/jerrycaimin.github.io/desaysv-embodied-juicefs-2026.html.svg" alt="views" style="vertical-align:middle;margin-left:4px;"></span></p>
+</section>
+
+<!-- 2 JuiceFS 方案 -->
+<section class="slide" data-notes="<b>JuiceFS 只用 10 秒回顾：</b>数据在对象存储、元数据独立、客户端提供完整 POSIX、本地盘池化成分布式缓存。<br><b>方案核心：</b>① 不新增硬件：每台 GPU 的 14TB 本地盘贡献出来（50 台 ≈ 700TB），加上 700TB 全闪，合计 1.4PB 热存组成<b>一个缓存池</b>；② 全量 16PB 数据只有一份，就在 OSS 里，业务看到统一的 /jfs；③ 不用再拷贝：读取时自动缓存，容量满了按 LRU 淘汰；也可以对指定目录主动<b>预热</b>。<br><b>关于全闪 NFS：</b>最好是把 JuiceFS 缓存节点直接部署在全闪服务器上、用它的本地盘作为 cache-dir，不建议『NFS 挂载目录再当缓存盘』（多一层网络文件系统，且 statfs 可能阻塞）。需要确认全闪的形态。<br><b>关于 10PB 对 1.4PB：</b>要诚实讲——热存装不下全量，不可能做到 10PB 全热。我们的思路是：缓存池里一个 block 只需要从 OSS 读 1 次，其余节点从缓存池 P2P 获取；读重复度越高、业务越能顺序/按批次预取，OSS 的 21GB/s 越不是瓶颈。我们不承诺把 21GB/s 变成更大，而是『少读重复数据』，把宝贵的 OSS 带宽留给真正的冷数据。">
+  <span class="tag">JuiceFS 方案</span>
+  <h2>用 JuiceFS 把 <em>GPU 本地盘 + 全闪</em> 变成一个缓存池</h2>
+  <div class="strip">
+    <span class="chip">数据在<b>对象存储</b></span><span class="chip">元数据<b>独立</b>集群</span>
+    <span class="chip">完整 <b>POSIX</b>，训练代码零改造</span><span class="chip">本地盘池化 · <b>P2P</b> 分发</span>
+  </div>
+  <div class="grid g-arch">
+    <div class="arch">
+      <div class="gpus">
+        <div class="gpu">GPU 节点<br>JuiceFS 客户端</div><div class="gpu">GPU 节点<br>JuiceFS 客户端</div><div class="gpu">GPU 节点<br>JuiceFS 客户端</div>
+        <span class="dots">···</span>
+        <div class="gpu">GPU 节点<br>JuiceFS 客户端</div>
+      </div>
+      <div class="arrow">统一挂载 <b>/jfs</b>（POSIX） ↓↑ 读命中 / 自动缓存</div>
+      <div class="pool">
+        <div class="t">分布式缓存池 ≈ 1.4 PB 热存</div>
+        <div class="row">
+          <div class="layer ok"><b>GPU 本地盘</b><small>50 × 14TB ≈ 700TB</small></div>
+          <div class="layer ok"><b>700TB 全闪</b><small>由 NFS 中转 → 缓存池一员</small></div>
+        </div>
+        <div class="arrow" style="margin-top:.6vh">LRU 自动淘汰 · 指定目录可预热 · 节点间 P2P</div>
+      </div>
+      <div class="arrow">↑ miss 时：缓存节点代理拉取，<b>同一数据只读 OSS 一次</b></div>
+      <div class="layer warn"><b>16PB OSS（唯一的全量副本）</b><small>+ 独立元数据集群（目录 / 属性 / 锁）</small></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:1.2vh">
+      <div class="card good"><h3>热数据：缓存池直出</h3>
+        <p>多节点聚合带宽，<b>随节点数线性扩展</b>，不再受 OSS 21GB/s 限制</p></div>
+      <div class="card good"><h3>冷数据：代理拉取 + P2P</h3>
+        <p>多个客户端要同一数据，<b>只向 OSS 读 1 次</b>，缓存池内 P2P 分发，节省宝贵的 OSS 带宽</p></div>
+      <div class="card good"><h3>无需拷贝 / 无需清理</h3>
+        <p>冷读与预热都可以；容量满按 <b>LRU</b> 淘汰，告别 “搬运 → 训练 → 删除”</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 3 对比 + 降本增效 -->
+<section class="slide" data-notes="<b>结论页。</b>先看表：核心变化是把『人工搬运的两级存储』变成『自动分层的一个文件系统』。<br><b>降本：</b>① 复用 GPU 本地盘，不增购存储；② 全闪不再只做中转，而是缓存池的一部分；③ 少读重复数据，OSS 带宽/请求费更省；④ 减少搬运产生的重复副本。<br><b>增效：</b>① 去掉搬运与清理的人力和等待；② 缓存预热开训即热；③ 数据只有一份，一致性管理简单。<br><b>坦诚的边界：</b>1.4PB 对 10PB+，如果一个 epoch 真的要把 10PB 都冷读一遍，21GB/s 理论上仍是约 5.5 天，所以关键看<b>数据重复度</b>（多 epoch、多任务共享同一批数据）、以及<b>业务能否提前告诉我们要读什么</b>（按训练顺序预取）。这是 POC 里要实测的指标：缓存命中率、OSS 回源带宽。<br><b>下一步：</b>一个小规模 POC，用真实训练任务看命中率和回源带宽。">
+  <span class="tag">对比 · 降本增效</span>
+  <h2>原方案 vs JuiceFS：<em>自动分层</em>，少读重复数据</h2>
+  <table>
+    <tr><th></th><th class="o">现有方案（OSS + 全闪 NFS）</th><th class="n">JuiceFS 方案</th></tr>
+    <tr><td>数据入口</td><td class="o">OSS 与 NFS 两个入口，业务需区分</td><td class="n">统一 /jfs，POSIX，一份数据</td></tr>
+    <tr><td>热存容量</td><td class="o">仅 700TB 全闪，GPU 本地盘闲置</td><td class="n">本地盘 700TB + 全闪 700TB ≈ <b>1.4PB</b></td></tr>
+    <tr><td>数据准备</td><td class="o">训练前手工拷贝，训练后手工删除</td><td class="n">读时自动缓存；目录预热；LRU 淘汰</td></tr>
+    <tr><td>冷数据读取</td><td class="o">各节点各自读 OSS，上限 21GB/s</td><td class="n">缓存池代理拉取，<b>同数据只读 OSS 一次</b>，P2P 分发</td></tr>
+    <tr><td>吞吐扩展</td><td class="o">OSS 带宽固定；NFS 受服务端上限</td><td class="n">热数据随缓存节点数线性扩展</td></tr>
+    <tr><td>运维</td><td class="o">搬运脚本、容量清理、两套权限</td><td class="n">一套文件系统，元数据统一管理</td></tr>
+  </table>
+  <div class="grid g3" style="margin-top:1.4vh">
+    <div class="card good"><h3>降本</h3><p>复用闲置本地盘 · 全闪不再只是中转 · 减少重复回源与重复副本</p></div>
+    <div class="card good"><h3>增效</h3><p>去掉搬运/清理等待 · 预热后开训即热 · 数据单副本、管理简单</p></div>
+    <div class="card"><h3>关键判断指标（POC 实测）</h3><p>缓存命中率 · OSS 回源带宽 · 数据重复度 · 业务可否提前预读</p></div>
+  </div>
+  <div class="ask"><b>坦诚的边界：</b>热存 1.4PB 对训练集 10PB+ 仍不是全热。JuiceFS 做的是<b>“不读重复数据”</b>，而非提高 OSS 上限——效果取决于数据重复度与读取模式。<b>想与你们确认：</b>一个 epoch 的重复读占比？训练能否按批次提前告知读取目录？700TB 全闪的部署形态？</div>
+</section>
+
+</div>
+
+<script>
+(function(){
+  var slides=[].slice.call(document.querySelectorAll('.slide'));
+  var bar=document.getElementById('bar'),pager=document.getElementById('pager'),notes=document.getElementById('notes');
+  var cur=0;
+  function go(i){
+    cur=Math.max(0,Math.min(slides.length-1,i));
+    slides.forEach(function(s,k){s.classList.toggle('active',k===cur)});
+    bar.style.width=((cur+1)/slides.length*100)+'%';
+    pager.textContent=(cur+1)+' / '+slides.length;
+    notes.innerHTML='<b>讲稿：</b>'+(slides[cur].dataset.notes||'');
+    history.replaceState(null,'','#'+(cur+1));
+  }
+  document.addEventListener('keydown',function(e){
+    var k=e.key;
+    if(['ArrowRight','ArrowDown','PageDown',' ','Enter'].indexOf(k)>-1){e.preventDefault();go(cur+1)}
+    else if(['ArrowLeft','ArrowUp','PageUp','Backspace'].indexOf(k)>-1){e.preventDefault();go(cur-1)}
+    else if(k==='Home')go(0);
+    else if(k==='End')go(slides.length-1);
+    else if(k==='n'||k==='N')notes.classList.toggle('on');
+    else if(k==='f'||k==='F'){document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen()}
+  });
+  document.getElementById('next').onclick=function(){go(cur+1)};
+  document.getElementById('prev').onclick=function(){go(cur-1)};
+  var x0=null;
+  document.addEventListener('touchstart',function(e){x0=e.touches[0].clientX});
+  document.addEventListener('touchend',function(e){if(x0===null)return;var d=e.changedTouches[0].clientX-x0;if(Math.abs(d)>50)go(cur+(d<0?1:-1));x0=null});
+  go((parseInt(location.hash.slice(1),10)||1)-1);
+})();
+</script>
+</body>
+</html>
