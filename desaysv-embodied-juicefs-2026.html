@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-CN"><head>
 <meta charset="UTF-8">
-<meta name="deck-version" content="mv6qaze0">
+<meta name="deck-version" content="mv6r44nz">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>具身训练存储：现有方案 vs JuiceFS · 德赛西威交流</title>
 <style>
@@ -191,7 +191,7 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
     <div class="stats rise" style="--d:.3s">
       <div class="stat"><div class="n good">1.4<small>PB 热存</small></div><p>复用现有盘：GPU 本地盘 + 全闪，无需另购存储</p></div>
       <div class="stat"><div class="n good">750<small>GB/s</small></div><p>热读聚合带宽（60 × 100Gbps），约 OSS 的 35 倍</p></div>
-      <div class="stat"><div class="n good">1<small>次回源</small></div><p>多个节点读同一数据，只向 OSS 读一次，其余 P2P</p></div>
+      <div class="stat"><div class="n good">1<small>次回源</small></div><p>多个节点读同一数据，只向对象存储读一次，其余 P2P</p></div>
     </div>
   </div>
 </section>
@@ -412,6 +412,7 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
   go((parseInt(location.hash.slice(1),10)||1)-1);
 })();
 </script>
+
 
 
 
