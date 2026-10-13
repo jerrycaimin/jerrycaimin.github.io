@@ -114,8 +114,9 @@ h2{font-size:52px;line-height:1.22;font-weight:750;letter-spacing:-.01em;margin:
 .bar{position:fixed;left:0;top:0;height:3px;background:linear-gradient(90deg,var(--teal),var(--blue));width:0;transition:width .4s;z-index:9}
 .pager{position:fixed;right:18px;bottom:14px;font-size:13px;color:var(--muted);z-index:9;user-select:none;display:flex;gap:10px;align-items:center}
 .pager button{border:0;background:rgba(255,255,255,.7);border-radius:99px;width:28px;height:28px;cursor:pointer;color:var(--ink2);font-size:15px}
-.hint{position:fixed;right:18px;top:12px;font-size:12px;color:#9b9586;z-index:9;transition:opacity 1s}
-.hint.off{opacity:0}
+.hint{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);font-size:12px;color:#9b9586;z-index:9;white-space:nowrap;user-select:none}
+.hint kbd{font-family:inherit;font-size:11px;padding:1px 6px;border-radius:5px;background:rgba(255,255,255,.7);color:var(--ink2);margin-right:3px}
+body.editing .hint{display:none}
 .notes{position:fixed;left:0;right:0;bottom:0;max-height:40vh;overflow:auto;background:rgba(20,27,43,.94);
   padding:18px 6vw 26px;font-size:17px;line-height:1.8;color:#f3e7cc;z-index:8;display:none}
 .notes.on{display:block}
@@ -135,11 +136,11 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
 </head>
 <body>
 <div class="bar" id="bar"></div>
-<div class="hint" id="hint">← → 翻页 · N 讲稿 · E 编辑 · ⌘S 保存 · F 全屏（输入时用 ⌥N / ⌥E）</div>
+<div class="hint" id="hint"><kbd>N</kbd>讲稿 · <kbd>E</kbd>编辑 · <kbd>←</kbd><kbd>→</kbd>翻页 · <kbd>F</kbd>全屏</div>
 <div class="pager"><button id="prev" title="上一页">‹</button><span id="pg"></span><button id="next" title="下一页">›</button></div>
 <div class="notes" id="notes"><b>讲稿：</b><div id="notesBody"></div></div>
 <div class="toast" id="toast"></div>
-<div class="editbar"><span id="saveState">编辑模式：直接点文字修改</span><button id="btnNotes">讲稿 ⌥N</button><button class="pri" id="btnSave">保存 ⌘S</button><button id="btnExit">退出 ⌥E</button></div>
+<div class="editbar"><span id="saveState">编辑模式：直接点文字修改</span><button id="btnNotes">讲稿 ⌥N</button><button class="pri" id="btnSave">保存 ⌘S</button><button class="pri" id="btnPub" style="background:var(--blue)">发布上线 ⌘⇧S</button><button id="btnExit">退出 ⌥E</button></div>
 
 <div class="stage" id="stage">
 
@@ -323,8 +324,34 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
   }
   addEventListener('beforeunload',function(e){if(dirty){e.preventDefault();e.returnValue=''}});
 
+  // publish straight to GitHub Pages via the Contents API; token lives only in this browser's localStorage
+  var GH={owner:'jerrycaimin',repo:'jerrycaimin.github.io',branch:'main'};
+  function b64utf8(s){var b=new TextEncoder().encode(s),out='';for(var i=0;i<b.length;i+=0x8000)out+=String.fromCharCode.apply(null,b.subarray(i,i+0x8000));return btoa(out)}
+  async function publish(){
+    var token=localStorage.getItem('gh-pages-token');
+    if(!token){
+      token=prompt('首次发布：粘贴 GitHub Fine-grained Token（仅授权 '+GH.repo+' 仓库 Contents 读写）\n只保存在本浏览器，不会写进 HTML');
+      if(!token)return;token=token.trim();localStorage.setItem('gh-pages-token',token);
+    }
+    var path=decodeURIComponent(location.pathname.split('/').pop());
+    var api='https://api.github.com/repos/'+GH.owner+'/'+GH.repo+'/contents/'+encodeURIComponent(path);
+    var hd={'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json'};
+    toast('正在发布…');
+    try{
+      var g=await fetch(api+'?ref='+GH.branch,{headers:hd,cache:'no-store'});
+      if(g.status===401){localStorage.removeItem('gh-pages-token');toast('Token 无效或已过期，请重新发布并输入');return}
+      var sha=g.ok?(await g.json()).sha:undefined;
+      var r=await fetch(api,{method:'PUT',headers:hd,body:JSON.stringify({message:'update '+path+' via in-page editor',content:b64utf8(serialize()),sha:sha,branch:GH.branch})});
+      if(!r.ok){var m=(await r.json().catch(function(){return{}})).message||r.status;if(r.status===401||r.status===403)localStorage.removeItem('gh-pages-token');toast('发布失败：'+m);return}
+      if(dirty)save(true);
+      toast('已发布上线，约 1 分钟后网站生效');
+      saveState.textContent='已发布 '+new Date().toTimeString().slice(0,8);
+    }catch(e){toast('发布失败：'+e.message)}
+  }
+
   document.addEventListener('keydown',function(e){
     var k=e.key;
+    if((e.metaKey||e.ctrlKey)&&e.shiftKey&&k.toLowerCase()==='s'){e.preventDefault();publish();return}
     if((e.metaKey||e.ctrlKey)&&k.toLowerCase()==='s'){e.preventDefault();save();return}
     // ⌥N / ⌥E work even while typing; use e.code because ⌥ changes e.key on macOS
     if(e.altKey&&e.code==='KeyN'){e.preventDefault();notes.classList.toggle('on');return}
@@ -342,12 +369,12 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
   document.getElementById('next').onclick=function(){go(cur+1)};
   document.getElementById('prev').onclick=function(){go(cur-1)};
   document.getElementById('btnSave').onclick=function(){save()};
+  document.getElementById('btnPub').onclick=publish;
   document.getElementById('btnExit').onclick=function(){setEdit(false)};
   document.getElementById('btnNotes').onclick=function(){notes.classList.toggle('on')};
   var x0=null;
   document.addEventListener('touchstart',function(e){x0=e.touches[0].clientX});
   document.addEventListener('touchend',function(e){if(x0===null||editing)return;var d=e.changedTouches[0].clientX-x0;if(Math.abs(d)>50)go(cur+(d<0?1:-1));x0=null});
-  setTimeout(function(){document.getElementById('hint').classList.add('off')},5000);
   window.deckSerialize=serialize;
   go((parseInt(location.hash.slice(1),10)||1)-1);
 })();
