@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-CN"><head>
 <meta charset="UTF-8">
+<meta name="deck-version" content="">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>具身训练存储：现有方案 vs JuiceFS · 德赛西威交流</title>
 <style>
@@ -230,7 +231,7 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
   function fit(){stage.style.setProperty('--s',Math.min(innerWidth/1600,innerHeight/900))}
   addEventListener('resize',fit);fit();
 
-  function toast(t){toastEl.textContent=t;toastEl.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(function(){toastEl.classList.remove('on')},2200)}
+  function toast(t,ms){toastEl.textContent=t;toastEl.classList.add('on');clearTimeout(toast.t);if(ms!==0)toast.t=setTimeout(function(){toastEl.classList.remove('on')},ms||2200)}
 
   function go(i){
     cur=Math.max(0,Math.min(slides.length-1,i));
@@ -247,8 +248,8 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
     slides.forEach(function(s){if(on)s.setAttribute('contenteditable','true');else s.removeAttribute('contenteditable')});
     if(on)notesBody.setAttribute('contenteditable','true');
     else{notesBody.removeAttribute('contenteditable');notes.classList.remove('on');if(document.activeElement)document.activeElement.blur()}
-    if(!on&&dirty){save();return}
-    toast(on?'编辑模式：点文字修改，修改会自动保存':'已退出编辑');
+    if(!on&&dirty)save(true);
+    toast(on?'编辑模式：点文字修改':'已退出编辑');
   }
   function markDirty(){
     dirty=true;saveState.textContent='未保存…';
@@ -261,8 +262,9 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
     document.execCommand('insertText',false,(e.clipboardData||window.clipboardData).getData('text/plain'));
   });
 
-  function serialize(){
+  function serialize(ver){
     var root=document.documentElement.cloneNode(true);
+    if(ver)root.querySelector('meta[name=deck-version]').setAttribute('content',ver);
     root.querySelectorAll('[contenteditable]').forEach(function(e){e.removeAttribute('contenteditable')});
     root.querySelector('body').removeAttribute('class');
     root.querySelector('#stage').removeAttribute('style');
@@ -303,19 +305,19 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
         if(fileHandle){
           var p=await fileHandle.queryPermission({mode:'readwrite'});
           if(p!=='granted'){
-            if(quiet){saveState.textContent='按 ⌘S 授权后自动保存';toast('需要授权一次：按 ⌘S 或点「保存」');return}
+            if(quiet){saveState.textContent='⌘S 可保存到本地';return}
             if(await fileHandle.requestPermission({mode:'readwrite'})!=='granted')return;
           }
         }else{
-          if(quiet){saveState.textContent='首次请按 ⌘S 选择本文件';toast('首次保存：按 ⌘S，选中本 HTML 文件覆盖');return}
+          if(quiet){saveState.textContent='⌘S 可保存到本地';return}
           fileHandle=await showSaveFilePicker({suggestedName:name,types:[{description:'HTML',accept:{'text/html':['.html']}}]});
           idb(1,fileHandle);
         }
         var w=await fileHandle.createWritable();await w.write(html);await w.close();
         dirty=false;
         var t=new Date().toTimeString().slice(0,8);
-        saveState.textContent='已自动保存 '+t;
-        toast('已保存到 '+fileHandle.name+' · '+t);return;
+        saveState.textContent='已保存到本地 '+t;
+        if(!quiet)toast('已保存到 '+fileHandle.name+' · '+t);return;
       }catch(e){if(e.name==='AbortError')return;fileHandle=null}
     }
     if(quiet)return;
@@ -341,13 +343,44 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
       var g=await fetch(api+'?ref='+GH.branch,{headers:hd,cache:'no-store'});
       if(g.status===401){localStorage.removeItem('gh-pages-token');toast('Token 无效或已过期，请重新发布并输入');return}
       var sha=g.ok?(await g.json()).sha:undefined;
-      var r=await fetch(api,{method:'PUT',headers:hd,body:JSON.stringify({message:'update '+path+' via in-page editor',content:b64utf8(serialize()),sha:sha,branch:GH.branch})});
+      var ver=Date.now().toString(36);
+      var r=await fetch(api,{method:'PUT',headers:hd,body:JSON.stringify({message:'update '+path+' via in-page editor',content:b64utf8(serialize(ver)),sha:sha,branch:GH.branch})});
       if(!r.ok){var m=(await r.json().catch(function(){return{}})).message||r.status;if(r.status===401||r.status===403)localStorage.removeItem('gh-pages-token');toast('发布失败：'+m);return}
-      if(dirty)save(true);
-      toast('已发布上线，约 1 分钟后网站生效');
+      document.querySelector('meta[name=deck-version]').setAttribute('content',ver);
+      dirty=false;
       saveState.textContent='已发布 '+new Date().toTimeString().slice(0,8);
+      waitLive(path,ver);
     }catch(e){toast('发布失败：'+e.message)}
   }
+
+  // GitHub Pages rebuilds in ~1 min and its CDN caches HTML for 10 min; a fresh query string bypasses the CDN
+  function liveUrl(path){return 'https://'+GH.repo+'/'+encodeURIComponent(path)}
+  async function liveVersion(path){
+    var t=await (await fetch(liveUrl(path)+'?v='+Date.now(),{cache:'no-store'})).text();
+    var m=t.match(/<meta name="deck-version" content="([0-9a-z]*)"/);
+    return m?m[1]:'';
+  }
+  async function waitLive(path,ver){
+    var t0=Date.now(),ok=false;
+    while(!ok&&Date.now()-t0<300000){
+      toast('已发布，等待网站生效… '+Math.round((Date.now()-t0)/1000)+'s',0);
+      try{ok=await liveVersion(path)===ver}catch(e){}
+      if(!ok)await new Promise(function(r){setTimeout(r,5000)});
+    }
+    if(!ok){toast('网站 5 分钟内未生效，请稍后刷新');return}
+    var url=liveUrl(path)+'?v='+ver+location.hash;
+    if(location.hostname===GH.repo&&!dirty){location.replace(url);return}
+    toast('网站已更新 ✓',4000);
+    saveState.innerHTML='<a href="'+url+'" target="_blank" style="color:#7fe3cf">网站已更新，点此查看</a>';
+  }
+  // on the live site, jump to the newest published version if the CDN served a stale copy
+  if(location.hostname===GH.repo){
+    liveVersion(decodeURIComponent(location.pathname.split('/').pop())).then(function(v){
+      var mine=document.querySelector('meta[name=deck-version]').getAttribute('content');
+      if(v&&parseInt(v,36)>(parseInt(mine,36)||0)&&!dirty)location.replace(location.pathname+'?v='+v+location.hash);
+    }).catch(function(){});
+  }
+
 
   document.addEventListener('keydown',function(e){
     var k=e.key;
