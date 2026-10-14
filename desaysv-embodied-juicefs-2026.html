@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-CN"><head>
 <meta charset="UTF-8">
-<meta name="deck-version" content="mv6r44nz">
+<meta name="deck-version" content="mv7cqiqz">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>具身训练存储：现有方案 vs JuiceFS · 德赛西威交流</title>
 <style>
@@ -216,7 +216,7 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
       <div class="soft slate good"><b>16PB OSS · 唯一的全量副本</b>21GB/s · 另有独立元数据集群</div>
     </div>
     <div class="stats rise" style="--d:.3s">
-      <div class="stat"><div class="n good">1.4<small>PB 热存</small></div><p>复用现有盘：GPU 本地盘 + 全闪，无需另购存储</p></div>
+      <div class="stat"><div class="n good">1.4<small>PB 热存</small></div><p>复用现有盘：GPU 本地盘 + 全闪，GPU越多，缓存池越大</p></div>
       <div class="stat"><div class="n good">750<small>GB/s</small></div><p>热读聚合带宽（60 × 100Gbps），约 OSS 的 35 倍</p></div>
       <div class="stat"><div class="n good">1<small>次回源</small></div><p>多个节点读同一数据，只向对象存储读一次，其余 P2P</p></div>
     </div>
@@ -224,7 +224,7 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
 </section>
 
 <!-- 3 10PB vs 1.4PB -->
-<section class="slide s4" data-notes="<b>客户最关心的一页。</b>先抛结论：热存只有训练数据的约 14%，但配合分批预热，命中率可以到 80% 以上。<br><b>① 10% 是常态：</b>我们看到的 PB 级训练客户，缓存一般是数据量的 10% 左右，很少对数 PB 数据 100% 预热，成本太高，也没有必要。<br><b>② 命中率经验值：</b>100% 缓存 → 100% 命中；50% 缓存 → 约 80%；10% 缓存如果只靠自然冷读，可能低于 50%；但配合训练节奏提前预热，也能做到 80% 以上。逻辑是：10PB 原始数据不会第一次就全读一遍，分批读取或分批预热来填充缓存池，让 JuiceFS 自己做 LRU 淘汰。<br><b>③ 冷读也不慢：</b>业务对存储常提很高的吞吐/IOPS 要求，但生产中实测往往只用到一部分。即使读的都是冷数据：a) JuiceFS 优化了对象存储读写，预读预取，单文件也能打满对象存储吞吐上限；b) 读取由缓存节点代理，不会多个节点争抢同一批资源，减少流量浪费；c) 单机缓存 + 分布式缓存 + 对象存储三层吞吐叠加，通常可以满足业务需求。<br><b>④ 诚实说例外：</b>如果每次训练都是不同机器读不同数据，10PB 只读一遍不回头、完全没有复用，那缓存没有“复用”的意义，只剩提前全量预热加速 GPU 读取的意义——建议要么 100% 缓存，要么不缓存。<br><b>要问客户：</b>一个训练任务的数据读几遍（epoch 数）？不同任务之间数据重叠多少？能否提前知道下一批要读的目录？">
+<section class="slide s4" data-notes="&lt;b&gt;客户最关心的一页。&lt;/b&gt;先抛结论：热存只有训练数据的约 14%，但配合分批预热，命中率可以到 80% 以上。&lt;br&gt;&lt;b&gt;① 10% 是常态：&lt;/b&gt;我们看到的 PB 级训练客户，缓存一般是数据量的 10% 左右，很少对数 PB 数据 100% 预热，成本太高，也没有必要。&lt;br&gt;&lt;b&gt;② 命中率经验值：&lt;/b&gt;100% 缓存 → 100% 命中；50% 缓存 → 约 80%；10% 缓存如果只靠自然冷读，可能低于 50%；但配合训练节奏提前预热，也能做到 80% 以上。逻辑是：10PB 原始数据不会第一次就全读一遍，分批读取或分批预热来填充缓存池，让 JuiceFS 自己做 LRU 淘汰。&lt;br&gt;&lt;b&gt;③ 冷读也不慢：&lt;/b&gt;业务对存储常提很高的吞吐/IOPS 要求，但生产中实测往往只用到一部分。即使读的都是冷数据：a) JuiceFS 优化了对象存储读写，预读预取，单文件也能打满对象存储吞吐上限；b) 读取由缓存节点代理，不会多个节点争抢同一批资源，减少流量浪费；c) 单机缓存 + 分布式缓存 + 对象存储三层吞吐叠加，通常可以满足业务需求。&lt;br&gt;&lt;b&gt;④ 诚实说例外：&lt;/b&gt;如果每次训练都是不同机器读不同数据，10PB 只读一遍不回头、完全没有复用，那缓存没有“复用”的意义，只剩提前全量预热加速 GPU 读取的意义——建议要么 100% 缓存，要么不缓存。&lt;br&gt;&lt;b&gt;要问客户：&lt;/b&gt;一个训练任务的数据读几遍（epoch 数）？不同任务之间数据重叠多少？能否提前知道下一批要读的目录？">
   <div class="rise"><div class="kicker"><i>03</i> · 10PB 怎么够用</div>
   <h2>1.4PB 热存，怎么撑起 <span class="hl-good">10PB</span> 训练数据？</h2>
   <p class="lead">热存约占训练数据的 14%。缓存不需要装下全部数据，只需要装下“接下来要读、会被反复读”的那部分。</p></div>
@@ -466,6 +466,7 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
   go((parseInt(location.hash.slice(1),10)||1)-1);
 })();
 </script>
+
 
 
 
