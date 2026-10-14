@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-CN"><head>
 <meta charset="UTF-8">
-<meta name="deck-version" content="mv7e3ekg">
+<meta name="deck-version" content="mv7lr8ju">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>具身训练存储：现有方案 vs JuiceFS · 德赛西威交流</title>
 <style>
@@ -175,7 +175,7 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
 <!-- 1 现状 -->
 <section class="slide s1" data-notes="&lt;b&gt;开场先对齐现状，让客户确认我们理解对了。&lt;/b&gt;图上三层：GPU 集群（假设约 50 台，每台 4×3.5TB 本地盘，目前没被利用）、700TB 全闪 NFS（训练前临时搬数据用）、16PB OSS（全量数据，混闪，支持 NFS）。&lt;br&gt;&lt;b&gt;三个数字：&lt;/b&gt;① 5.5 天：OSS 带宽上限 21GB/s，10PB 冷读一遍约 47.6 万秒；② ♾️ 反复搬运：每轮训练都要先拷进全闪 NFS、训练完再删，耗时耗人，数据还在两处（顺带一提：全闪 700TB 只覆盖 10PB+ 训练数据的约 7%）；③ 700TB：GPU 本地盘一直闲置。&lt;br&gt;&lt;b&gt;要确认：&lt;/b&gt;GPU 节点数量与本地盘是否确实空闲；全闪 NFS 的形态（几台服务器）。">
   <div class="rise"><div class="kicker"><i>01</i> · 现状</div>
-  <h2>16PB 原始数据，训练性能依赖&nbsp;<span class="hl-bad">21 GB/s</span> 的对象存储</h2>
+  <h2>16PB 原始数据，训练性能依赖&nbsp;<span class="hl-bad">25 GB/s</span> 的对象存储</h2>
   <p class="lead">热数据要人工搬进全闪、训练完再删掉；GPU 节点上的本地盘却一直闲着。</p></div>
   <div class="cols">
     <div class="flow rise" style="--d:.15s">
@@ -466,6 +466,7 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
   go((parseInt(location.hash.slice(1),10)||1)-1);
 })();
 </script>
+
 
 
 
