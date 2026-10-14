@@ -27,6 +27,33 @@ html,body{height:100%;overflow:hidden;background:#e9e4d9;color:var(--ink);
 .s2::after{width:460px;height:460px;right:-140px;top:-160px;background:#c9d4fb}
 .s3::before{width:520px;height:520px;right:-120px;bottom:-220px;background:#bfe9dc}
 .s3::after{width:420px;height:420px;left:-160px;top:-180px;background:#f3dfae}
+.s4::before{width:560px;height:560px;left:-180px;bottom:-240px;background:#c9d4fb}
+.s4::after{width:480px;height:480px;right:-160px;top:-200px;background:#bfe9dc}
+/* hit-rate bars */
+.colh{font-size:22px;font-weight:750;display:flex;align-items:center;gap:10px}
+.colh::before{content:"";width:28px;height:4px;border-radius:2px;background:var(--teal)}
+.colsub{font-size:16px;color:var(--muted);margin:8px 0 22px;line-height:1.5}
+.hitrow{display:grid;grid-template-columns:200px 1fr 76px;align-items:center;gap:14px;margin:20px 0}
+.hitrow .lb{font-size:17px;color:var(--ink);font-weight:600;line-height:1.3}
+.hitrow .lb small{display:block;font-size:13px;color:var(--muted);font-weight:400}
+.track{height:24px;border-radius:99px;background:rgba(20,27,43,.07);overflow:hidden}
+.fill{height:100%;width:var(--w);border-radius:99px;background:linear-gradient(90deg,var(--teal),var(--blue))}
+.fill.warn{background:linear-gradient(90deg,var(--amber),var(--coral))}
+.slide.active .fill{animation:grow 1.2s cubic-bezier(.2,.7,.2,1) both;animation-delay:.35s}
+@keyframes grow{from{width:0}}
+.pct{font-family:var(--num);font-weight:800;font-size:24px;color:var(--teal);text-align:right}
+.pct.bad{color:var(--coral)}
+.hitcap{font-size:13px;color:var(--muted);margin-top:4px}
+.steps{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:22px;font-size:15px;color:var(--ink2)}
+.steps span.tagp{margin:0}
+.steps i{font-style:normal;color:var(--teal);font-weight:700}
+.why{display:flex;gap:16px;padding:20px 0;border-top:1px solid var(--line)}
+.why:last-child{border-bottom:1px solid var(--line)}
+.why .no{font-family:var(--num);font-size:30px;font-weight:800;color:var(--teal);line-height:1;width:30px;flex:none}
+.why b{font-size:19px;color:var(--ink)}
+.why p{font-size:16px;color:var(--ink2);line-height:1.55;margin-top:3px}
+.edge{margin-top:40px;border-radius:22px;padding:18px 26px;background:rgba(246,226,185,.65);color:#5c4410;font-size:17px;line-height:1.65}
+.edge b{color:#8a5a06}
 
 /* entrance */
 .rise{opacity:0}
@@ -169,7 +196,7 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
 </section>
 
 <!-- 2 JuiceFS 方案 -->
-<section class="slide s2" data-notes="&lt;b&gt;JuiceFS 只用 10 秒回顾：&lt;/b&gt;数据在对象存储、元数据独立、客户端完整 POSIX、本地盘池化成分布式缓存。&lt;br&gt;&lt;b&gt;方案核心：&lt;/b&gt;① 50 台 GPU 的本地盘（≈700TB）+ 10 台挂载 700TB 全闪 NFS 的缓存节点，合计 1.4PB 组成一个缓存池；② 全量 16PB 只在 OSS 一份，业务看到统一 /jfs；③ 不再拷贝：读时自动缓存，满了 LRU 淘汰，也可对目录主动预热。&lt;br&gt;&lt;b&gt;吞吐怎么算：&lt;/b&gt;60 台 × 100Gbps ≈ 60 × 12.5GB/s ≈ 750GB/s，约 OSS 的 35 倍。这是按网卡算的理论聚合上限，实际还受本地 NVMe 和全闪 NFS 后端能力约束，POC 实测。&lt;br&gt;&lt;b&gt;关于 10PB 对 1.4PB：&lt;/b&gt;诚实讲热存装不下全量。思路是同一个 block 只回源 OSS 一次，其余节点从缓存池 P2P 获取；读重复度越高、业务越能提前预取，21GB/s 越不是瓶颈。">
+<section class="slide s2" data-notes="&lt;b&gt;JuiceFS 只用 10 秒回顾：&lt;/b&gt;数据在对象存储、元数据独立、客户端完整 POSIX、本地盘池化成分布式缓存。&lt;br&gt;&lt;b&gt;方案核心：&lt;/b&gt;① 50 台 GPU 的本地盘（≈700TB）+ 10 台挂载 700TB 全闪 NFS 的缓存节点，合计 1.4PB 组成一个缓存池；② 全量 16PB 只在 OSS 一份，业务看到统一 /jfs；③ 不再拷贝：读时自动缓存，满了 LRU 淘汰，也可对目录主动预热。&lt;br&gt;&lt;b&gt;吞吐怎么算：&lt;/b&gt;60 台 × 100Gbps ≈ 60 × 12.5GB/s ≈ 750GB/s，约 OSS 的 35 倍。这是按网卡算的理论聚合上限，实际还受本地 NVMe 和全闪 NFS 后端能力约束，POC 实测。&lt;br&gt;&lt;b&gt;关于 10PB 对 1.4PB：&lt;/b&gt;诚实讲热存装不下全量。思路是同一个 block 只回源 OSS 一次，其余节点从缓存池 P2P 获取；读重复度越高、业务越能提前预取，21GB/s 越不是瓶颈（下一页展开）。">
   <div class="rise"><div class="kicker"><i>02</i> · JuiceFS 方案</div>
   <h2>把闲置本地盘和全闪，变成一个 <span class="hl-good">750 GB/s</span> 的缓存池</h2>
   <p class="ribbon"><span>数据在对象存储</span><span>元数据独立集群</span><span>完整 POSIX，训练代码零改造</span><span>节点间 P2P 分发</span></p></div>
@@ -196,9 +223,36 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
   </div>
 </section>
 
-<!-- 3 对比 -->
-<section class="slide s3" data-notes="&lt;b&gt;结论页。&lt;/b&gt;核心变化：把『人工搬运的两层存储』变成『自动分层的一个文件系统』。&lt;br&gt;&lt;b&gt;降本：&lt;/b&gt;复用 GPU 本地盘、全闪不再只做中转、少读重复数据省 OSS 带宽和请求、减少搬运产生的重复副本。&lt;br&gt;&lt;b&gt;增效：&lt;/b&gt;热读750GB/s；去掉搬运和清理的人力与等待；预热后开训即热；数据单副本，一致性简单。&lt;br&gt;&lt;b&gt;坦诚的边界：&lt;/b&gt;如果一个 epoch 真要把 10PB 都冷读一遍，21GB/s 理论上仍约 5.5 天。关键看数据重复度（多 epoch、多任务共享）、业务能否提前告知读取目录。POC 里实测缓存命中率、OSS 回源带宽。&lt;br&gt;&lt;b&gt;下一步：&lt;/b&gt;小规模 POC，用真实训练任务来验证，只要重复读取数据存在，JuiceFS一定能有大幅的帮助。">
-  <div class="rise"><div class="kicker"><i>03</i> · 对比与价值</div>
+<!-- 3 10PB vs 1.4PB -->
+<section class="slide s4" data-notes="<b>客户最关心的一页。</b>先抛结论：热存只有训练数据的约 14%，但配合分批预热，命中率可以到 80% 以上。<br><b>① 10% 是常态：</b>我们看到的 PB 级训练客户，缓存一般是数据量的 10% 左右，很少对数 PB 数据 100% 预热，成本太高，也没有必要。<br><b>② 命中率经验值：</b>100% 缓存 → 100% 命中；50% 缓存 → 约 80%；10% 缓存如果只靠自然冷读，可能低于 50%；但配合训练节奏提前预热，也能做到 80% 以上。逻辑是：10PB 原始数据不会第一次就全读一遍，分批读取或分批预热来填充缓存池，让 JuiceFS 自己做 LRU 淘汰。<br><b>③ 冷读也不慢：</b>业务对存储常提很高的吞吐/IOPS 要求，但生产中实测往往只用到一部分。即使读的都是冷数据：a) JuiceFS 优化了对象存储读写，预读预取，单文件也能打满对象存储吞吐上限；b) 读取由缓存节点代理，不会多个节点争抢同一批资源，减少流量浪费；c) 单机缓存 + 分布式缓存 + 对象存储三层吞吐叠加，通常可以满足业务需求。<br><b>④ 诚实说例外：</b>如果每次训练都是不同机器读不同数据，10PB 只读一遍不回头、完全没有复用，那缓存没有“复用”的意义，只剩提前全量预热加速 GPU 读取的意义——建议要么 100% 缓存，要么不缓存。<br><b>要问客户：</b>一个训练任务的数据读几遍（epoch 数）？不同任务之间数据重叠多少？能否提前知道下一批要读的目录？">
+  <div class="rise"><div class="kicker"><i>03</i> · 10PB 怎么够用</div>
+  <h2>1.4PB 热存，怎么撑起 <span class="hl-good">10PB</span> 训练数据？</h2>
+  <p class="lead">热存约占训练数据的 14%。缓存不需要装下全部数据，只需要装下“接下来要读、会被反复读”的那部分。</p></div>
+  <div class="cols" style="grid-template-columns:1.1fr 1fr;gap:64px;margin-top:26px;align-items:start">
+    <div class="rise" style="--d:.15s">
+      <div class="colh">命中率 ≠ 缓存占比</div>
+      <p class="colsub">业内常见：缓存约为训练数据的 10%，很少对 PB 级数据 100% 预热——成本太高，也没必要。</p>
+      <div class="hitrow"><div class="lb">100% 缓存<small>全量预热，成本最高</small></div><div class="track"><div class="fill" style="--w:100%"></div></div><div class="pct">100%</div></div>
+      <div class="hitrow"><div class="lb">50% 缓存</div><div class="track"><div class="fill" style="--w:80%"></div></div><div class="pct">~80%</div></div>
+      <div class="hitrow"><div class="lb">10% 缓存<small>只靠自然冷读</small></div><div class="track"><div class="fill warn" style="--w:45%"></div></div><div class="pct bad">&lt;50%</div></div>
+      <div class="hitrow"><div class="lb">10% 缓存<small>配合分批预热</small></div><div class="track"><div class="fill" style="--w:82%"></div></div><div class="pct">80%+</div></div>
+      <p class="hitcap">业务缓存命中率经验值，实际取决于数据重复度与读取模式，POC 实测</p>
+      <div class="steps"><span class="tagp teal">10PB 不会一次读完</span><i>→</i><span class="tagp teal">按训练批次预热</span><i>→</i><span class="tagp teal">填满缓存池</span><i>→</i><span class="tagp teal">LRU 自动淘汰</span></div>
+    </div>
+    <div class="rise" style="--d:.3s">
+      <div class="colh">冷数据，也不是慢数据</div>
+      <p class="colsub">业务提出的吞吐/IOPS 要求很高，但生产中实测往往只用到一部分。即使是冷读：</p>
+      <div class="why"><div class="no">1</div><div><b>单文件也能打满对象存储</b><p>预读、预取与并发优化，冷读也能吃满 OSS 21GB/s 上限</p></div></div>
+      <div class="why"><div class="no">2</div><div><b>缓存节点代理回源</b><p>同一批数据只拉一次，不会多节点争抢、重复浪费流量</p></div></div>
+      <div class="why"><div class="no">3</div><div><b>三层吞吐叠加</b><p>单机缓存 + 分布式缓存（≈750GB/s）+ 对象存储（21GB/s），通常足以满足业务</p></div></div>
+    </div>
+  </div>
+  <div class="edge rise" style="--d:.45s"><b>唯一的例外：</b>每次训练换机器、读不同数据，10PB 只读一遍、不回头——缓存没有“复用”价值。此时建议<b>要么 100% 全量预热</b>（只为加速 GPU 读取），<b>要么干脆不缓存</b>。</div>
+</section>
+
+<!-- 4 对比 -->
+<section class="slide s3" data-notes="&lt;b&gt;结论页。&lt;/b&gt;核心变化：把『人工搬运的两层存储』变成『自动分层的一个文件系统』。&lt;br&gt;&lt;b&gt;降本：&lt;/b&gt;复用 GPU 本地盘、全闪不再只做中转、少读重复数据省 OSS 带宽和请求、减少搬运产生的重复副本。&lt;br&gt;&lt;b&gt;增效：&lt;/b&gt;热读750GB/s；去掉搬运和清理的人力与等待；预热后开训即热；数据单副本，一致性简单。&lt;br&gt;&lt;b&gt;坦诚的边界：&lt;/b&gt;热存约占 14%，靠分批预热 + LRU 可到 80%+ 命中（见上一页）；如果一个 epoch 真要把 10PB 都冷读一遍且不复用，21GB/s 理论上仍约 5.5 天，这种场景要么全量预热要么不缓存。POC 里实测缓存命中率、OSS 回源带宽。&lt;br&gt;&lt;b&gt;下一步：&lt;/b&gt;小规模 POC，用真实训练任务来验证，只要重复读取数据存在，JuiceFS一定能有大幅的帮助。">
+  <div class="rise"><div class="kicker"><i>04</i> · 对比与价值</div>
   <h2>从「人工搬运的两层存储」到「<span class="hl-good">自动分层</span>」</h2>
   <p class="lead">一个文件系统、一份数据：热的在缓存池，冷的在 OSS，不再人工搬运。</p></div>
   <div class="cmp rise" style="--d:.15s">
@@ -211,8 +265,8 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
   </div>
   <div class="tri rise" style="--d:.3s">
     <div><h3>降本</h3><p>复用闲置本地盘<br>全闪NFS从中转变成缓存池的一部分<br>杜绝人工重复拷贝，热存永远是对象存储的子集</p></div>
-    <div><h3>增效</h3><p>热读 <b>从依赖NFS到750GB/s</b><br>去掉搬运与清理的等待<br>预热后开训即热</p></div>
-    <div class="note"><h3>坦诚的边界</h3><p>1.4PB 热存对 10PB+ 训练数据仍不是全热。JuiceFS 做的是<b>不读重复数据</b>，效果取决于数据重复度与读取模式——POC 实测命中率与回源带宽。只要重复读取数据存在，JuiceFS一定能有大幅的帮助。</p></div>
+    <div><h3>增效</h3><p>热读 <b>从依赖NFS到750GB/s</b><br>分批预热，命中率可达 <b>80%+</b><br>去掉搬运与清理的等待</p></div>
+    <div class="note"><h3>坦诚的边界</h3><p>1.4PB 热存（约 14%）配合分批预热即可支撑 10PB 训练；只有“数据只读一遍、没有复用”的场景，缓存才失去意义。只要重复读取数据存在，JuiceFS一定能有大幅的帮助。</p></div>
   </div>
 </section>
 
