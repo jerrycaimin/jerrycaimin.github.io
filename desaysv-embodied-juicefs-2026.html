@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-CN"><head>
 <meta charset="UTF-8">
-<meta name="deck-version" content="mv7cqiqz">
+<meta name="deck-version" content="mv7ctxei">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>具身训练存储：现有方案 vs JuiceFS · 德赛西威交流</title>
 <style>
@@ -261,7 +261,7 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
     <div class="r"><div class="k">热存容量</div><div class="o">仅 700TB 全闪，本地盘闲置</div><div class="a">→</div><div class="v">本地盘 + 全闪 ≈ <em>1.4PB</em></div></div>
     <div class="r"><div class="k">读取吞吐</div><div class="o">OSS 上限 21GB/s + NFS 读取上限</div><div class="a">→</div><div class="v">热数据 ≈ <em>750GB/s</em>，随节点数线性扩展</div></div>
     <div class="r"><div class="k">数据准备</div><div class="o">训练前手工拷贝，训练后手工删除</div><div class="a">→</div><div class="v">读时自动缓存 · 目录预热 · LRU 淘汰</div></div>
-    <div class="r"><div class="k">冷数据</div><div class="o">各节点各自读 OSS，重复回源</div><div class="a">→</div><div class="v">缓存节点代理拉取，同一数据<em>只回源 1 次</em></div></div>
+    <div class="r"><div class="k">冷数据</div><div class="o">要么临时拷贝，要么各节点各自读 OSS，重复回源</div><div class="a">→</div><div class="v">缓存节点代理拉取，同一数据<em>只回源 1 次</em></div></div>
   </div>
   <div class="tri rise" style="--d:.3s">
     <div><h3>降本</h3><p>复用闲置本地盘<br>全闪NFS从中转变成缓存池的一部分<br>杜绝人工重复拷贝，热存永远是对象存储的子集</p></div>
@@ -466,6 +466,7 @@ body.editing #notesBody{outline:1px dashed rgba(242,181,68,.6);outline-offset:4p
   go((parseInt(location.hash.slice(1),10)||1)-1);
 })();
 </script>
+
 
 
 
