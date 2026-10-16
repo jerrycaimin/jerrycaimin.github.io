@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>《抱大腿》（找朋友）新手规则图解 · 附案例</title>
+<style>
+:root{
+  --paper:#f4f1ea;--ink:#141b2b;--ink2:#3a4357;--muted:#7a8091;--line:#ddd6c8;
+  --blue:#2849d6;--teal:#0b9a82;--coral:#e0513b;--amber:#d48a16;
+  --num:"SF Pro Display","Helvetica Neue","PingFang SC",Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:#e9e4d9;color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue","Microsoft YaHei",sans-serif;-webkit-font-smoothing:antialiased}
+
+.stage{position:absolute;left:50%;top:50%;width:1600px;height:900px;transform:translate(-50%,-50%) scale(var(--s,1));
+  background:var(--paper);overflow:hidden;box-shadow:0 30px 80px rgba(20,27,43,.12)}
+.slide{position:absolute;inset:0;padding:64px 96px 56px;opacity:0;pointer-events:none;transition:opacity .45s}
+.slide.active{opacity:1;pointer-events:auto}
+.slide::before,.slide::after{content:"";position:absolute;border-radius:50%;filter:blur(70px);opacity:.5;pointer-events:none;z-index:0}
+.slide>*{position:relative;z-index:1}
+.in{width:calc(100%/var(--z,1));transform:scale(var(--z,1));transform-origin:0 0}
+.a::before{width:560px;height:560px;right:-160px;top:-200px;background:#f6c9b8}
+.a::after{width:420px;height:420px;left:-140px;bottom:-200px;background:#f3dfae}
+.b::before{width:600px;height:600px;left:200px;top:140px;background:#bfe9dc}
+.b::after{width:460px;height:460px;right:-140px;top:-160px;background:#c9d4fb}
+.c::before{width:520px;height:520px;right:-120px;bottom:-220px;background:#bfe9dc}
+.c::after{width:420px;height:420px;left:-160px;top:-180px;background:#f3dfae}
+.d::before{width:560px;height:560px;left:-180px;bottom:-240px;background:#c9d4fb}
+.d::after{width:480px;height:480px;right:-160px;top:-200px;background:#bfe9dc}
+
+.rise{opacity:0}
+.slide.active .rise{animation:rise .7s cubic-bezier(.2,.7,.2,1) both;animation-delay:var(--d,0s)}
+@keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+
+/* type */
+.kicker{font-size:15px;letter-spacing:.22em;color:var(--muted);font-weight:600}
+.kicker i{font-style:normal;color:var(--blue)}
+h2{font-size:44px;line-height:1.22;font-weight:750;letter-spacing:-.01em;margin:10px 0 8px;max-width:1400px}
+.lead{font-size:21px;line-height:1.6;color:var(--ink2);max-width:1360px}
+.lead b{color:var(--ink)}
+.hl-bad{background:linear-gradient(90deg,var(--coral),var(--amber));-webkit-background-clip:text;background-clip:text;color:transparent}
+.hl-good{background:linear-gradient(90deg,var(--teal),var(--blue));-webkit-background-clip:text;background-clip:text;color:transparent}
+.foot{position:absolute;left:96px;bottom:24px;font-size:13px;color:var(--muted)}
+.tagp{display:inline-block;font-size:14px;padding:2px 12px;border-radius:99px;font-weight:600;vertical-align:2px}
+.tagp.amber{background:#f6e2b9;color:#8a5a06}.tagp.coral{background:#f8d3cb;color:#a3301d}.tagp.teal{background:#c8eee3;color:#066b5a}.tagp.blue{background:#d6defa;color:#1c36a3}
+
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:48px;margin-top:26px;align-items:start}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:32px;margin-top:26px;align-items:start}
+.panel{background:rgba(255,255,255,.62);border-radius:22px;padding:20px 26px;box-shadow:inset 0 0 0 1px rgba(20,27,43,.06)}
+.panel h3{font-size:21px;margin-bottom:8px;display:flex;align-items:center;gap:10px}
+.panel h3::before{content:"";width:24px;height:4px;border-radius:2px;background:var(--teal)}
+.panel p,.panel li{font-size:17px;line-height:1.7;color:var(--ink2)}
+.panel ul{list-style:none}
+.panel li{padding-left:18px;position:relative;margin:2px 0}
+.panel li::before{content:"";position:absolute;left:0;top:.8em;width:7px;height:7px;border-radius:50%;background:var(--teal)}
+.panel b{color:var(--ink)}
+.case{border-radius:22px;padding:16px 24px;background:rgba(246,226,185,.7);color:#5c4410;font-size:17px;line-height:1.7}
+.case .ct{display:inline-block;font-size:13px;letter-spacing:.16em;font-weight:800;color:#fff;background:var(--amber);border-radius:99px;padding:1px 12px;margin-bottom:4px}
+.case b{color:#8a5a06}
+.tip{border-radius:18px;padding:12px 22px;background:rgba(200,238,227,.75);color:#066b5a;font-size:17px;line-height:1.6}
+.tip b{color:#044f42}
+.warn{border-radius:18px;padding:12px 22px;background:rgba(248,211,203,.7);color:#8a2a18;font-size:17px;line-height:1.6}
+.warn b{color:#a3301d}
+.ok{color:var(--teal);font-weight:800}.no{color:var(--coral);font-weight:800}
+
+/* playing cards (pure css) */
+.pc{position:relative;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;
+  width:48px;height:68px;border-radius:8px;background:#fff;color:var(--ink);font-style:normal;font-weight:800;
+  font-size:21px;line-height:1;box-shadow:0 2px 6px rgba(20,27,43,.18),inset 0 0 0 1px rgba(20,27,43,.12);margin:0 3px;flex:none}
+.pc b{font-size:22px;font-weight:400;margin-top:3px;color:inherit!important}
+.pc.r{color:#d33a2c}
+.pc.jk{font-size:17px;gap:2px}.pc.jk b{font-size:17px;font-weight:800;margin:0}
+.pc.big{background:#fff3ef}.pc.sm{background:#eef1f8}
+.pc[data-p]::after{content:attr(data-p);position:absolute;right:-7px;top:-9px;min-width:22px;height:22px;border-radius:99px;
+  background:var(--amber);color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;padding:0 5px}
+.pc.t{box-shadow:0 0 0 3px #f2b544,0 2px 8px rgba(212,138,22,.4)}
+.pc.x{opacity:.45}
+.pc.back{background:repeating-linear-gradient(45deg,#2849d6 0 6px,#3a5be0 6px 12px);color:transparent;box-shadow:0 2px 6px rgba(20,27,43,.25),inset 0 0 0 3px #fff}
+.hand{display:flex;align-items:center;flex-wrap:nowrap}
+.hand.tight .pc{margin:0 -3px 0 0}
+.hand .gap{width:18px;flex:none}
+.rank{display:flex;align-items:flex-start;gap:6px}
+.rank .grp{display:flex;flex-direction:column;align-items:center}
+.rank .lab{font-size:14px;font-weight:700;color:var(--muted);margin-top:10px;white-space:nowrap}
+.rank .gt{color:var(--teal);font-weight:800;font-size:24px;margin:0 4px;line-height:68px}
+.dots3{font-size:22px;margin:0 6px;color:var(--muted)}
+
+/* seats */
+.seat{position:absolute;width:92px;height:92px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  font-size:15px;font-weight:700;text-align:center;line-height:1.25;color:var(--ink)}
+.seat small{font-size:12px;font-weight:600;opacity:.8}
+.seat.bk{background:linear-gradient(135deg,#f8e6c2,#f2c56b);box-shadow:0 8px 22px rgba(212,138,22,.3)}
+.seat.fr{background:rgba(200,238,227,.6);border:2.5px dashed var(--teal);color:#066b5a}
+.seat.df{background:linear-gradient(135deg,#dfe4f2,#c3cdf0)}
+.seat.up{background:#fff;box-shadow:inset 0 0 0 2px var(--blue)}
+.seat.dn{background:#e7e3d8;box-shadow:inset 0 0 0 2px #b8b2a5;color:#5d5f6b}
+.ring{position:relative;width:520px;height:430px}
+.table{position:absolute;left:170px;top:135px;width:180px;height:160px;border-radius:50%;
+  background:radial-gradient(120% 120% at 50% 0%,#14a88f,#0b7f6c);box-shadow:inset 0 0 0 6px rgba(255,255,255,.35),0 18px 40px rgba(11,154,130,.25);
+  color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:17px;font-weight:700;line-height:1.5}
+.table small{font-size:13px;font-weight:500;opacity:.9}
+.row5{display:flex;align-items:center;gap:14px}
+.row5 .seat{position:static;flex:none}
+.arr{font-size:30px;color:var(--blue);font-weight:800}
+
+/* flow */
+.flow{display:flex;align-items:stretch;gap:0;margin-top:30px}
+.step{flex:1;background:rgba(255,255,255,.66);border-radius:22px;padding:18px 18px 16px;box-shadow:inset 0 0 0 1px rgba(20,27,43,.06);position:relative}
+.step+.step{margin-left:30px}
+.step+.step::before{content:"›";position:absolute;left:-24px;top:50%;transform:translateY(-50%);font-size:34px;color:var(--teal);font-weight:800}
+.step .no2{font-family:var(--num);font-size:34px;font-weight:800;color:var(--teal);line-height:1}
+.step h4{font-size:20px;margin:6px 0 6px}
+.step p{font-size:15.5px;line-height:1.6;color:var(--ink2)}
+
+/* tables */
+.tbl{width:100%;border-collapse:collapse;font-size:17px}
+.tbl th{font-size:13px;letter-spacing:.14em;color:var(--muted);text-align:left;font-weight:700;padding:6px 12px;border-bottom:1.5px solid var(--line)}
+.tbl td{padding:9px 12px;border-bottom:1px solid var(--line);color:var(--ink2);line-height:1.45;vertical-align:middle}
+.tbl td b{color:var(--ink)}
+.tbl .n{font-family:var(--num);font-weight:800;color:var(--teal);font-size:20px}
+
+/* big stat */
+.stats{display:flex;gap:0}
+.stat{flex:1;padding:6px 24px;border-left:1.5px solid var(--line)}
+.stat:first-child{border-left:0;padding-left:0}
+.n{white-space:nowrap;font-family:var(--num);font-size:56px;font-weight:800;line-height:1;letter-spacing:-.02em;background:linear-gradient(90deg,var(--teal),var(--blue));-webkit-background-clip:text;background-clip:text;color:transparent}
+.n small{font-size:22px;font-weight:600;margin-left:6px;-webkit-text-fill-color:var(--ink2)}
+.stat p{font-size:16px;color:var(--ink2);margin-top:8px;line-height:1.5}
+
+/* bars */
+.bar2{display:grid;grid-template-columns:150px 1fr 90px;align-items:center;gap:12px;margin:12px 0;font-size:16px;color:var(--ink2)}
+.track{height:22px;border-radius:99px;background:rgba(20,27,43,.07);overflow:hidden;position:relative}
+.fill{height:100%;width:var(--w);border-radius:99px;background:linear-gradient(90deg,var(--teal),var(--blue))}
+.fill.w{background:linear-gradient(90deg,var(--amber),var(--coral))}
+.slide.active .fill{animation:grow 1.1s cubic-bezier(.2,.7,.2,1) both;animation-delay:.3s}
+@keyframes grow{from{width:0}}
+.bar2 .v{font-family:var(--num);font-weight:800;font-size:20px;color:var(--teal);text-align:right}
+.mark{position:absolute;top:-3px;bottom:-3px;width:3px;background:var(--ink)}
+
+/* ladder */
+.ladder{display:flex;flex-wrap:nowrap;gap:6px;align-items:center}
+.lv{width:56px;height:56px;border-radius:14px;background:#fff;display:flex;align-items:center;justify-content:center;font-family:var(--num);font-weight:800;font-size:22px;color:var(--ink2);box-shadow:inset 0 0 0 1.5px rgba(20,27,43,.12);flex:none}
+.lv.top{background:linear-gradient(135deg,#f8e6c2,#f2c56b);color:#6a4306}
+.lv.hl{background:linear-gradient(135deg,#bfe9dc,#8fd8c4);color:#066b5a;box-shadow:none}
+.ladder .ar{color:var(--teal);font-weight:800;font-size:18px}
+
+/* chrome */
+.bar{position:fixed;left:0;top:0;height:3px;background:linear-gradient(90deg,var(--teal),var(--blue));width:0;transition:width .4s;z-index:9}
+.pager{position:fixed;right:18px;bottom:14px;font-size:13px;color:var(--muted);z-index:9;user-select:none;display:flex;gap:10px;align-items:center}
+.pager button{border:0;background:rgba(255,255,255,.7);border-radius:99px;width:28px;height:28px;cursor:pointer;color:var(--ink2);font-size:15px}
+.hint{position:fixed;right:190px;bottom:16px;font-size:12px;color:#9b9586;z-index:9;white-space:nowrap;user-select:none}
+.hint kbd{font-family:inherit;font-size:11px;padding:1px 6px;border-radius:5px;background:rgba(255,255,255,.7);color:var(--ink2);margin-right:3px}
+html.le-editing .hint,html.le-editing .pager{display:none}
+html.le-editing .stage [contenteditable] :hover{outline:1px dashed rgba(40,73,214,.45);outline-offset:3px}
+</style>
+</head>
+<body>
+<div class="bar" id="bar" data-le-ui></div>
+<div class="hint" id="hint" data-le-ui><kbd>N</kbd>讲稿 · <kbd>E</kbd>编辑 · <kbd>←</kbd><kbd>→</kbd>翻页 · <kbd>F</kbd>全屏</div>
+<div class="pager" data-le-ui><button id="prev" title="上一页">‹</button><span id="pg"></span><button id="next" title="下一页">›</button></div>
+
+<div class="stage" id="stage" data-le-editable>
+
+<!-- 1 封面 -->
+<section class="slide a" style="--z:1.15" data-notes="<b>开场：</b>《抱大腿》的正式名字是“找朋友”，是一个 5 人用 3 副牌的升级类扑克游戏。“抱大腿”的意思就是：庄家要在牌局里偷偷找到一个强力队友（大腿）。<br>这份材料按公司仓库 juicedata/findfriend 的 rule.md 和 packages/shared 里的规则引擎整理，全部数字都和代码一致。">
+<div class="in">
+  <div class="rise"><div class="kicker"><i>00</i> · 新手入门 · 来自 juicedata/findfriend</div>
+  <h2 style="font-size:54px;margin-top:14px">《抱大腿》（找朋友）<br><span class="hl-good">20 页看懂规则，附案例</span></h2>
+  <p class="lead">5 个人、3 副牌，庄家要在牌局中<b>偷偷找一个“大腿”</b>（朋友），和他联手去守住分数。谁是朋友，要等指定的牌打出来才公开。</p></div>
+  <div style="display:grid;grid-template-columns:1fr 560px;gap:40px;margin-top:10px;align-items:center">
+    <div class="rise" style="--d:.15s">
+      <div class="stats" style="margin-top:30px">
+        <div class="stat"><div class="n">5<small>人</small></div><p>每人有独立的级别</p></div>
+        <div class="stat"><div class="n">162<small>张</small></div><p>3 副完整扑克牌</p></div>
+        <div class="stat"><div class="n">31<small>+7</small></div><p>每人 31 张，留 7 张底牌</p></div>
+        <div class="stat"><div class="n">↺</div><p>一律逆时针行牌</p></div>
+      </div>
+      <div class="tip" style="margin-top:34px"><b>一句话记住：</b>庄家方想“少丢分”，闲家方想“抢分到 140”。朋友是谁，打到才知道。</div>
+    </div>
+    <div class="ring rise" style="--d:.3s;transform:scale(.88);transform-origin:center">
+      <div class="table">牌桌<small>逆时针 ↺</small></div>
+      <div class="seat bk" style="left:214px;top:314px">👑 庄家<small>领头的人</small></div>
+      <div class="seat df" style="left:357px;top:210px">闲家</div>
+      <div class="seat fr" style="left:302px;top:43px">? 朋友<small>身份隐藏</small></div>
+      <div class="seat df" style="left:126px;top:43px">闲家</div>
+      <div class="seat df" style="left:71px;top:210px">闲家</div>
+    </div>
+  </div>
+</div>
+  <p class="foot">规则来源 github.com/juicedata/findfriend（rule.md + packages/shared）· 2026-10 · <span>👁 <img src="https://hits.sh/jerrycaimin.github.io/findfriend-baodatui-rules-2026.html.svg" alt="views" style="vertical-align:middle;margin-left:4px;"></span></p>
+</section>
+
+<!-- 2 角色与目标 -->
+<section class="slide b" style="--z:1.2" data-notes="<b>先搞清谁和谁一队。</b>每局只有庄家固定，朋友是庄家声明一张“朋友牌”后，谁先打出这张牌谁就是朋友。<br>正常局 2 打 3：庄家+朋友 对 三个闲家，闲家要拿 140 分。如果朋友没找到，变成庄家一个人对四个闲家（一打四），闲家要拿 180 分，难度更高，但庄家赢了就直接赢下整场游戏。">
+<div class="in">
+  <div class="rise"><div class="kicker"><i>01</i> · 角色与目标</div>
+  <h2>谁和谁一队？每局只有两种阵型</h2>
+  <p class="lead">游戏<b>没有固定搭档</b>。庄家扣底后指定一张“朋友牌”，谁先把它打出来，谁就是朋友。</p></div>
+  <div class="g2" style="margin-top:30px">
+    <div class="panel rise" style="--d:.15s;padding:24px 30px">
+      <h3>正常局：2 打 3 <span class="tagp teal">找到朋友</span></h3>
+      <div class="row5" style="margin:14px 0 10px">
+        <div class="seat bk" style="width:78px;height:78px;font-size:14px">👑庄家</div>
+        <div class="seat fr" style="width:78px;height:78px;font-size:14px">朋友</div>
+        <span style="font-size:22px;color:var(--muted);font-weight:700">VS</span>
+        <div class="seat df" style="width:78px;height:78px;font-size:14px">闲家</div>
+        <div class="seat df" style="width:78px;height:78px;font-size:14px">闲家</div>
+        <div class="seat df" style="width:78px;height:78px;font-size:14px">闲家</div>
+      </div>
+      <p>三名闲家合计拿到 <b style="color:var(--coral)">≥ 140 分</b> → 闲家赢；不到 140 分 → 庄家方赢。</p>
+    </div>
+    <div class="panel rise" style="--d:.3s;padding:24px 30px">
+      <h3>一打四：1 打 4 <span class="tagp coral">没找到朋友</span></h3>
+      <div class="row5" style="margin:14px 0 10px">
+        <div class="seat bk" style="width:78px;height:78px;font-size:14px">👑庄家</div>
+        <span style="font-size:22px;color:var(--muted);font-weight:700">VS</span>
+        <div class="seat df" style="width:78px;height:78px;font-size:14px">闲家</div>
+        <div class="seat df" style="width:78px;height:78px;font-size:14px">闲家</div>
+        <div class="seat df" style="width:78px;height:78px;font-size:14px">闲家</div>
+        <div class="seat df" style="width:78px;height:78px;font-size:14px">闲家</div>
+      </div>
+      <p>四名闲家要拿 <b style="color:var(--coral)">≥ 180 分</b> 才赢；庄家只要守住，就<b>直接取得整场游戏最终胜利</b>。</p>
+    </div>
+  </div>
+  <div class="case rise" style="--d:.45s;margin-top:30px"><span class="ct">案例</span><br>庄家小甲指定“第 2 张 ♠A”当朋友牌。小丁打出了第 2 张 ♠A → <b>小丁立刻公开成为朋友</b>，局面变成“小甲+小丁”对“小乙、小丙、小戊”，闲家需要 140 分才能赢。</div>
+</div>
+</section>
+
+<!-- 3 牌与分 -->
+<section class="slide c" style="--z:1.4" data-notes="<b>牌数要会算：</b>3 副牌每副 54 张（含大小王）=162 张；5 人×31=155，再加 7 张底牌=162。<br><b>分牌只有三种：</b>5 分、10 分、K 分别是 5/10/10 分。一副牌 4 个花色×25=100 分，三副就是 300 分。其余牌不值分，但“大牌”不一定值分，这是新手常搞混的点。">
+<div class="in">
+  <div class="rise"><div class="kicker"><i>02</i> · 牌与分</div>
+  <h2>162 张牌，只有 3 种牌“值分”，总共 <span class="hl-good">300 分</span></h2>
+  <p class="lead">打牌的目的，就是把这 300 分尽量收进自己这一方。</p></div>
+  <div class="g2" style="margin-top:22px;grid-template-columns:1.05fr 1fr">
+    <div class="rise" style="--d:.15s">
+      <div class="panel" style="padding:24px 28px">
+        <h3>值分的牌</h3>
+        <div class="hand" style="margin:16px 0 8px;gap:6px">
+          <i class="pc r" data-p="5分">5<b>♥</b></i><i class="pc" data-p="10分">10<b>♠</b></i><i class="pc r" data-p="10分">K<b>♦</b></i>
+          <span class="gap"></span>
+          <span style="font-size:17px;color:var(--ink2);line-height:1.6">5 = 5 分<br>10 = 10 分 &nbsp; K = 10 分</span>
+        </div>
+        <p>每个花色 5+10+K = 25 分，一副牌 4 个花色 = <b>100 分</b>，三副牌 = <b>300 分</b>。其他牌（A、Q、J、王……）都<b>不值分</b>。</p>
+      </div>
+      <div class="case" style="margin-top:20px"><span class="ct">案例</span><br>某一墩五个人出了：♠K、♠A、♦5、♥3、♠10。<br>分数 = 10 + 0 + 5 + 0 + 10 = <b>25 分</b>，归赢这一墩的人。</div>
+    </div>
+    <div class="rise" style="--d:.3s">
+      <div class="panel" style="padding:24px 28px">
+        <h3>162 张怎么分</h3>
+        <div class="bar2"><span>5 人 × 31 张</span><div class="track"><div class="fill" style="--w:95.7%"></div></div><span class="v">155</span></div>
+        <div class="bar2"><span>底牌</span><div class="track"><div class="fill w" style="--w:4.3%"></div></div><span class="v" style="color:var(--coral)">7</span></div>
+        <p style="margin-top:10px">每人发 31 张，剩下 <b>7 张扣在桌上做底牌</b>。庄家定下来后会拿起底牌，再扣回 7 张（后面讲）。</p>
+        <p style="margin-top:8px">首局随机一人拿“发牌标记”，以后每局<b>逆时针</b>顺移一位；发牌从标记者的下一位开始。</p>
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- 4 级别 -->
+<section class="slide d" style="--z:1.3" data-notes="<b>级别是每个人自己的。</b>每个人从 2（迷你版从 5）开始，赢了就升级，升到 A 就封顶。<br><b>台上/台下：</b>开局所有人都在台上；一局结束后，赢的一方全部上台，输的一方全部下台。只有台上的人才能当庄家；台下的人也能亮牌，但只能“代亮”台上玩家的级牌，不能自己当庄。<br>“本局级牌”是这一局庄家的级别对应的牌，它会被拔进主牌区，后面讲牌序时会用到。">
+<div class="in">
+  <div class="rise"><div class="kicker"><i>03</i> · 级别与台上台下</div>
+  <h2>每人一个级别，赢了升级，升到 <span class="hl-good">A</span> 封顶</h2>
+  <p class="lead">玩的是一整场游戏：谁先把级别升到顶并赢下关键一局，谁就是最终赢家。</p></div>
+  <div class="rise" style="--d:.15s;margin-top:24px">
+    <div style="font-size:15px;color:var(--muted);letter-spacing:.1em;margin-bottom:8px">标准版 · 所有人从 2 开始</div>
+    <div class="ladder"><div class="lv hl">2</div><span class="ar">›</span><div class="lv">3</div><span class="ar">›</span><div class="lv">4</div><span class="ar">›</span><div class="lv">5</div><span class="ar">›</span><div class="lv">6</div><span class="ar">›</span><div class="lv">7</div><span class="ar">›</span><div class="lv">8</div><span class="ar">›</span><div class="lv">9</div><span class="ar">›</span><div class="lv">10</div><span class="ar">›</span><div class="lv">J</div><span class="ar">›</span><div class="lv">Q</div><span class="ar">›</span><div class="lv">K</div><span class="ar">›</span><div class="lv top">A</div></div>
+    <div style="font-size:15px;color:var(--muted);letter-spacing:.1em;margin:18px 0 8px">迷你版 · 想打快点用这个（一场开始前选定，中途不能换）</div>
+    <div class="ladder"><div class="lv hl">5</div><span class="ar">›</span><div class="lv">10</div><span class="ar">›</span><div class="lv">K</div><span class="ar">›</span><div class="lv top">A</div></div>
+  </div>
+  <div class="g2" style="margin-top:26px">
+    <div class="panel rise" style="--d:.3s">
+      <h3>台上 / 台下</h3>
+      <ul><li>开局所有人都在<b>台上</b></li><li>一局结束：<b>赢的全上台，输的全下台</b></li><li>只有台上的人能当<b>庄家</b></li><li>台下的人照样发牌、出牌、得分，还能<b>代亮</b>台上玩家的级牌</li></ul>
+    </div>
+    <div class="case rise" style="--d:.45s"><span class="ct">案例</span><br>小乙现在 <b>7 级、在台下</b>。这一局他和队友赢了：<br>• 他被安排“上台”，但这局<b>不涨级</b>（基础奖励换成了上台）；<br>• 如果赢得很漂亮（后面讲的额外升级），他依然可以涨级。</div>
+  </div>
+</div>
+</section>
+
+<!-- 5 流程 -->
+<section class="slide a" style="--z:1.45" data-notes="<b>先看整体，再逐个拆开。</b>一局分 6 步：发牌亮主 → 定庄 → 庄家拿底扣底 → 庄家声明朋友牌 → 逐墩出牌 → 结算。<br>后面第 6～18 页，分别对应这六个步骤。">
+<div class="in">
+  <div class="rise"><div class="kicker"><i>04</i> · 一局的完整流程</div>
+  <h2>一局牌分 6 步，后面一步一步讲</h2>
+  <p class="lead">先有个整体印象：先<b>决定谁当庄、哪个花色是主</b>，再<b>找朋友</b>，最后<b>打牌算分</b>。</p></div>
+  <div class="flow rise" style="--d:.15s">
+    <div class="step"><div class="no2">1</div><h4>发牌 + 亮主</h4><p>逆时针发牌，每人 31 张。发牌时就可以亮级牌，决定主花色。</p></div>
+    <div class="step"><div class="no2">2</div><h4>定庄</h4><p>五人都点“不反”后，由亮牌结果确定庄家和本局级牌。</p></div>
+    <div class="step"><div class="no2">3</div><h4>拿底扣底</h4><p>庄家拿 7 张底牌，再从 38 张中扣回 7 张。</p></div>
+    <div class="step"><div class="no2">4</div><h4>指定朋友</h4><p>庄家公开声明：“第 N 张某某牌”就是朋友牌。</p></div>
+    <div class="step"><div class="no2">5</div><h4>逐墩出牌</h4><p>逆时针出牌，赢墩者收分并领出下一墩。朋友牌出现时朋友现身。</p></div>
+    <div class="step"><div class="no2">6</div><h4>结算</h4><p>闲家最后一墩赢了要“抠底”；按分数定胜负、升级。</p></div>
+  </div>
+  <div class="g2 rise" style="--d:.3s;margin-top:34px">
+    <div class="tip"><b>方向提醒：</b>发牌、亮牌、出牌、裁定顺位，<b>一律逆时针</b>，没有例外。</div>
+    <div class="warn"><b>别急着记细节：</b>每一页都有案例，先看案例再回头看规则，会轻松很多。</div>
+  </div>
+</div>
+</section>
+
+<!-- 6 亮主反主 -->
+<section class="slide b" style="--z:1.15" data-notes="<b>亮主就是亮出“级牌”来决定主花色。</b>台上玩家亮自己级别的牌；台下玩家只能亮某位台上玩家级别的牌。<br><b>反主只比张数：</b>三张 > 两张 > 一张。后亮的张数更多才能反掉；张数一样不能反，不看花色、不看级别、也不看台上台下。<br><b>无主：</b>只有三张大王或三张小王可以反成无主，一张王、两张王、大小王混合都不行，并且之前要先有人亮过级牌。<br><b>发完牌后：</b>没有倒计时，要五个人都点“不反”，亮牌阶段才结束。">
+<div class="in">
+  <div class="rise"><div class="kicker"><i>05</i> · 亮主与反主</div>
+  <h2>亮级牌来定主花色，反主<span class="hl-good">只比张数</span></h2>
+  <p class="lead">发牌过程中就可以亮。亮 1 张、2 张（同花同点）或 3 张都行，<b>三张 ＞ 两张 ＞ 一张</b>，同张数不能反。</p></div>
+  <div class="g2" style="grid-template-columns:1.25fr 1fr;margin-top:22px">
+    <div class="panel rise" style="--d:.15s;padding:20px 26px">
+      <h3>案例：本局庄家候选人小甲是 7 级（台上）</h3>
+      <table class="tbl">
+        <tr><td style="width:60px"><b>小甲</b></td><td style="width:150px"><div class="hand"><i class="pc r">7<b>♥</b></i></div></td><td><span class="ok">✓ 成立</span> 亮一张，主花色暂定 ♥</td></tr>
+        <tr><td><b>小乙</b></td><td><div class="hand"><i class="pc">7<b>♣</b></i><i class="pc">7<b>♣</b></i></div></td><td><span class="ok">✓ 反主</span> 两张＞一张，主花色变 ♣</td></tr>
+        <tr><td><b>小丙</b></td><td><div class="hand"><i class="pc r">7<b>♦</b></i><i class="pc r">7<b>♦</b></i></div></td><td><span class="no">✗ 不行</span> 也是两张，同张数不能反</td></tr>
+        <tr><td><b>小丁</b></td><td><div class="hand"><i class="pc">7<b>♠</b></i><i class="pc">7<b>♠</b></i><i class="pc">7<b>♠</b></i></div></td><td><span class="ok">✓ 反主</span> 三张＞两张，主花色变 ♠</td></tr>
+        <tr><td><b>小戊</b></td><td><div class="hand"><i class="pc jk sm">小<b>王</b></i><i class="pc jk sm">小<b>王</b></i><i class="pc jk sm">小<b>王</b></i></div></td><td><span class="no">✗ 不行</span> 三张王 ＝ 三张级牌，同张数</td></tr>
+      </table>
+    </div>
+    <div class="rise" style="--d:.3s">
+      <div class="panel" style="margin-bottom:18px"><h3>谁可以亮？</h3><ul><li><b>台上</b>玩家：只能亮<b>自己级别</b>的牌</li><li><b>台下</b>玩家：可以<b>代亮</b>任一台上玩家的级牌，但自己不会成为庄家</li></ul></div>
+      <div class="panel" style="margin-bottom:18px"><h3>无主怎么来？</h3><p>只有<b>三张大王</b>或<b>三张小王</b>可以反成“无主”；一张/两张王、大小王混搭都不行，而且之前必须已经有人亮过级牌。</p></div>
+      <div class="tip"><b>结束亮牌：</b>发完牌后没有倒计时，要<b>五个人都点“不反”</b>才进入下一步。</div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- 7 定庄 -->
+<section class="slide c" style="--z:1.4" data-notes="<b>定庄口诀：</b>台上的人亮牌，自己当庄；台下的人代亮，从“他的下一家”开始逆时针找，第一个“级别=所亮点数且在台上”的人当庄。<br>案例里小戊台下亮 9：从小甲开始数——小甲 5 级不对，小乙 2 级不对，小丙 9 级且台上，所以小丙当庄，本局级牌是 9。<br>如果发完牌没人亮主：翻底牌，翻到的牌点数如果正好是某台上玩家的级别，就由他当庄，所翻牌的花色是主花色；7 张翻完都不行，本局作废重新发牌。">
+<div class="in">
+  <div class="rise"><div class="kicker"><i>06</i> · 定庄</div>
+  <h2>谁当庄？台下代亮时，<span class="hl-good">从下一家起逆时针找</span></h2></div>
+  <div class="rise" style="--d:.15s;margin-top:20px">
+    <div style="font-size:15px;color:var(--muted);letter-spacing:.1em;margin-bottom:10px">座次（逆时针 →）：小甲 → 小乙 → 小丙 → 小丁 → 小戊 → 回到小甲</div>
+    <div class="row5">
+      <div class="seat up">小甲<small>5级·台上</small></div><span class="arr">›</span>
+      <div class="seat dn">小乙<small>2级·台下</small></div><span class="arr">›</span>
+      <div class="seat up" style="background:linear-gradient(135deg,#f8e6c2,#f2c56b)">小丙<small>9级·台上</small></div><span class="arr">›</span>
+      <div class="seat up">小丁<small>5级·台上</small></div><span class="arr">›</span>
+      <div class="seat dn">小戊<small>9级·台下</small></div>
+    </div>
+  </div>
+  <div class="g2" style="margin-top:26px">
+    <div class="case rise" style="--d:.3s"><span class="ct">案例 1 · 台下代亮</span><br>小戊（台下）亮出一张 <i class="pc" style="width:34px;height:46px;font-size:15px;margin:0 4px;vertical-align:middle">9<b style="font-size:15px">♠</b></i>。<br>从小戊的<b>下一家小甲</b>开始数：小甲 5 级 ✗ → 小乙 2 级（还在台下）✗ → <b>小丙 9 级·台上 ✓</b>。<br>→ <b>小丙当庄，本局级牌是 9，主花色 ♠</b>。</div>
+    <div class="case rise" style="--d:.4s"><span class="ct">案例 2 · 台上自己亮</span><br>小丁（5 级·台上）亮出 5♥：台上的人只能亮自己的级牌，所以<b>小丁自己就是暂定庄家</b>。<br><br><span class="ct" style="background:var(--coral)">无人亮主</span><br>翻底牌：翻到的点数若是某台上玩家的级别就由他当庄，花色即主花色；7 张翻完都不行 → <b>作废重发</b>。</div>
+  </div>
+</div>
+</section>
+
+<!-- 8 扣底与朋友牌 -->
+<section class="slide d" style="--z:1.25" data-notes="<b>庄家先扣底。</b>庄家把 7 张底牌拿起来，手里变 38 张，再自己选 7 张扣下，底牌里可以包含分牌和主牌。<br><b>然后公开声明朋友牌：</b>形式是“第 N 张 某花色某点数”，N 可以是 1/2/3。关键限制：朋友牌必须是副牌，不能是王、不能是本局级牌、有主局里也不能是主花色的牌。<br>案例：本局庄家小丙 9 级，主花色是♠。可以指定第 2 张 ♦A、第 1 张 ♥K；不能指定大王、任何 9、♠A（主花色）。">
+<div class="in">
+  <div class="rise"><div class="kicker"><i>07</i> · 扣底与指定朋友</div>
+  <h2>庄家扣底后，要公开指定一张<span class="hl-good">“朋友牌”</span></h2></div>
+  <div class="g2" style="margin-top:22px;grid-template-columns:1fr 1.2fr">
+    <div class="rise" style="--d:.15s">
+      <div class="panel"><h3>扣底</h3><ul><li>庄家拿起 7 张底牌，手里变 <b>38 张</b></li><li>自己挑 <b>7 张扣回去</b>，手牌回到 31 张</li><li>底牌可以放分牌，也可以放主牌</li></ul></div>
+      <div class="panel" style="margin-top:18px"><h3>声明朋友牌</h3><ul><li>形式：<b>第 1/2/3 张</b> 某花色某点数，如“第 2 张 ♦A”</li><li>必须在<b>庄家第一次出牌前</b>公开声明</li><li>只有正常出牌时打出的才计数，<b>底牌里的不算</b></li></ul></div>
+    </div>
+    <div class="rise" style="--d:.3s">
+      <div class="case"><span class="ct">案例</span><br>本局庄家小丙，<b>级牌 9，主花色 ♠</b>。他想指定朋友牌：
+        <div style="margin:12px 0 4px;font-weight:700;color:#066b5a">✓ 可以指定（都是副牌）</div>
+        <div class="hand"><i class="pc r">A<b>♦</b></i><i class="pc r">K<b>♥</b></i><i class="pc">5<b>♣</b></i></div>
+        <div style="margin:12px 0 4px;font-weight:700;color:#a3301d">✗ 不能指定</div>
+        <div class="hand" style="align-items:flex-start"><div style="text-align:center"><i class="pc jk big r">大<b>王</b></i><div style="font-size:12px;margin-top:4px">王</div></div><div style="text-align:center"><i class="pc r">9<b>♥</b></i><div style="font-size:12px;margin-top:4px">级牌</div></div><div style="text-align:center"><i class="pc">9<b>♠</b></i><div style="font-size:12px;margin-top:4px">级牌</div></div><div style="text-align:center"><i class="pc">A<b>♠</b></i><div style="font-size:12px;margin-top:4px">主花色</div></div></div>
+      </div>
+      <div class="tip" style="margin-top:16px"><b>记忆法：</b>朋友牌必须是<b>“非主牌”</b>——不是王、不是级牌、不是主花色牌。无主局可指定任意花色的非级牌。</div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- 9 朋友现身 -->
+<section class="slide a" style="--z:1.5" data-notes="<b>谁是朋友？</b>庄家指定的第 N 张目标牌，由“庄家以外的人”打出的那一刻，这个人就公开成为朋友。他在这之前赢的墩和分，也一起算进庄家方。<br><b>三种“没找到”：</b>目标牌扣在底牌里；整局结束次数不足；指定的那一次是庄家自己打出的（庄家不能当自己的朋友，失败是立刻判定）。<br>找不到朋友就变成一打四，闲家要 180 分，庄家赢了直接最终胜利，所以这是一个有风险也有机会的选择。<br>另外：朋友现身前，任何人不得用语言或手势暗示自己有没有这张牌。">
+<div class="in">
+  <div class="rise"><div class="kicker"><i>08</i> · 朋友现身</div>
+  <h2>第 N 张目标牌被<span class="hl-good">别人</span>打出，那个人就是朋友</h2></div>
+  <div class="g2" style="margin-top:20px;grid-template-columns:1.15fr 1fr">
+    <div class="rise" style="--d:.15s">
+      <div class="case"><span class="ct">案例</span> 庄家小丙指定“<b>第 2 张 ♦A</b>”
+        <table class="tbl" style="margin-top:8px;font-size:16px">
+          <tr><td style="width:100px"><b>第 2 墩</b></td><td>小乙打出 ♦A（这是<b>第 1 张</b>）</td><td style="width:150px;color:var(--muted)">还不是朋友</td></tr>
+          <tr><td><b>第 5 墩</b></td><td>小丁打出 ♦A（这是<b>第 2 张</b>）</td><td><span class="ok">朋友现身！</span></td></tr>
+          <tr><td><b>之后</b></td><td colspan="2">小丁之前赢过的墩和分，<b>追溯算进庄家方</b></td></tr>
+        </table>
+      </div>
+      <div class="hand rise" style="--d:.3s;margin:22px 0 0">
+        <i class="pc r">A<b>♦</b></i><span style="margin:0 12px;color:var(--muted)">第1张 小乙打出</span>
+        <i class="pc r t">A<b>♦</b></i><span style="margin:0 12px;color:var(--teal);font-weight:700">第2张 小丁打出 → 朋友！</span>
+      </div>
+    </div>
+    <div class="rise" style="--d:.3s">
+      <div class="warn"><b>什么时候算“没找到朋友”（变一打四）？</b><br>① 目标牌被扣在了<b>底牌</b>里<br>② 打完整局，目标牌<b>出现次数不足</b><br>③ 第 N 张恰好是<b>庄家自己</b>打出的（立刻判定失败，不再等下一张）</div>
+      <div class="panel" style="margin-top:16px"><h3>注意</h3><ul><li>一手同时出 2 张、3 张目标牌，按<b>张数连续计数</b></li><li>朋友现身前，<b>不得言语、手势暗示</b>自己有没有目标牌</li></ul></div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- 10 主牌牌序 -->
+<section class="slide b" style="--z:1.5" data-notes="<b>这是新手最容易晕的一页：</b>本局级牌（比如 9）不再放在普通牌序里，而是升入主牌区；同时，主花色的所有牌也都变成主牌。<br>有主局主牌从大到小：大王 > 小王 > 主花色级牌 > 副级牌（其他三个花色的级牌，彼此同大）> 主花色的其他普通牌。<br>同一墩里同大的牌，先打出的赢。非主花色按 A K Q J 10 9 … 的顺序，把级牌点数“抽走”。无主局：只有 大王 > 小王 > 级牌 这三档。<br>牌门：每个非主花色各自一门，所有主牌合为一门。">
+<div class="in">
+  <div class="rise"><div class="kicker"><i>09</i> · 主牌与牌序</div>
+  <h2>级牌和主花色牌，全部升入“<span class="hl-good">主牌区</span>”</h2></div>
+  <div class="rise" style="--d:.15s;margin-top:18px">
+    <div style="font-size:16px;color:var(--ink2);margin-bottom:12px">案例：本局 <b>级牌 7、主花色 ♥</b>。有主局的主牌，从大到小：</div>
+    <div class="rank">
+      <div class="grp"><div class="hand"><i class="pc jk big r">大<b>王</b></i></div><div class="lab">大王</div></div><span class="gt">›</span>
+      <div class="grp"><div class="hand"><i class="pc jk sm">小<b>王</b></i></div><div class="lab">小王</div></div><span class="gt">›</span>
+      <div class="grp"><div class="hand"><i class="pc r t">7<b>♥</b></i></div><div class="lab" style="color:var(--amber)">主花色级牌</div></div><span class="gt">›</span>
+      <div class="grp"><div class="hand"><i class="pc t">7<b>♠</b></i><i class="pc r t">7<b>♦</b></i><i class="pc t">7<b>♣</b></i></div><div class="lab" style="color:var(--amber)">副级牌（三个花色同大）</div></div><span class="gt">›</span>
+      <div class="grp"><div class="hand"><i class="pc r">A<b>♥</b></i><i class="pc r">K<b>♥</b></i><i class="pc r">Q<b>♥</b></i><span class="dots3">…</span><i class="pc r">2<b>♥</b></i></div><div class="lab" style="color:var(--blue)">主花色其他牌（A 最大）</div></div>
+    </div>
+  </div>
+  <div class="g3" style="margin-top:24px">
+    <div class="panel rise" style="--d:.3s"><h3>牌门</h3><p>每个<b>非主花色</b>各算一门，所有<b>主牌</b>合成一门。级牌不管原花色，都归主牌。</p></div>
+    <div class="panel rise" style="--d:.4s"><h3>副牌怎么排</h3><p>A K Q J 10 9 8 <s style="color:var(--coral)">7</s> 6 5 4 3 2，<b>级牌 7 被抽走</b>，所以 8 和 6 视为紧挨着。</p></div>
+    <div class="panel rise" style="--d:.5s"><h3>无主局</h3><p>主牌只有三档：<b>大王 ＞ 小王 ＞ 级牌</b>（四个花色的级牌同大）。其余牌各归各花色。</p></div>
+  </div>
+</div>
+</section>
+
+<!-- 11 牌型 -->
+<section class="slide c" style="--z:1.15" data-notes="<b>这里是本游戏最特别的地方：</b>除了常规的单张、对子、拖拉机，还多了“刻子”（三张完全相同的牌）。<br>“完全相同”指的是同点数且同花色（三副牌里三张一样的）。大小王也可以组成对子和刻子。<br>拖拉机就是在该门里“连续的对子/刻子”。副牌拖拉机要看“抽走级牌之后”的连续关系，比如级牌是 8，♠7♠7 和 ♠9♠9 就是连对，因为 8 被抽走。<br>主牌拖拉机可以跨越类别，比如 小王对 + 大王对、主花色级牌对 + 小王对。">
+<div class="in">
+  <div class="rise"><div class="kicker"><i>10</i> · 合法牌型</div>
+  <h2>单张、对子、<span class="hl-good">刻子</span>、拖拉机：出牌的“结构”</h2>
+  <p class="lead">“完全相同”＝<b>同点数 + 同花色</b>（3 副牌里才会有 3 张一样的）。</p></div>
+  <div class="g2" style="margin-top:18px">
+    <div class="panel rise" style="--d:.15s">
+      <table class="tbl">
+        <tr><td style="width:100px"><b>单张</b></td><td><div class="hand"><i class="pc">K<b>♠</b></i></div></td><td>任意一张牌</td></tr>
+        <tr><td><b>对子</b></td><td><div class="hand"><i class="pc r">9<b>♥</b></i><i class="pc r">9<b>♥</b></i></div></td><td>2 张完全相同</td></tr>
+        <tr><td><b>刻子</b></td><td><div class="hand"><i class="pc">5<b>♣</b></i><i class="pc">5<b>♣</b></i><i class="pc">5<b>♣</b></i></div></td><td>3 张完全相同<br><span style="font-size:14px;color:var(--coral)">独立牌型，不是“对子+单张”</span></td></tr>
+        <tr><td><b>对子拖拉机</b></td><td><div class="hand"><i class="pc">8<b>♠</b></i><i class="pc">8<b>♠</b></i><span class="gap" style="width:6px"></span><i class="pc">9<b>♠</b></i><i class="pc">9<b>♠</b></i></div></td><td>同门里<b>连续</b>的 2 个以上对子</td></tr>
+        <tr><td><b>刻子拖拉机</b></td><td><div class="hand tight"><i class="pc r">J<b>♦</b></i><i class="pc r">J<b>♦</b></i><i class="pc r">J<b>♦</b></i><span class="gap" style="width:10px"></span><i class="pc r">Q<b>♦</b></i><i class="pc r">Q<b>♦</b></i><i class="pc r">Q<b>♦</b></i></div></td><td>连续的 2 个以上刻子</td></tr>
+      </table>
+    </div>
+    <div class="rise" style="--d:.3s">
+      <div class="case"><span class="ct">案例 · 副牌拖拉机</span><br>本局级牌是 <b>8</b>，8 被抽走，所以 7 和 9 视为“挨着”：
+        <div class="hand" style="margin:10px 0"><i class="pc">7<b>♠</b></i><i class="pc">7<b>♠</b></i><span class="gap" style="width:6px"></span><i class="pc">9<b>♠</b></i><i class="pc">9<b>♠</b></i><span style="margin-left:14px;font-weight:700;color:#066b5a">= 对子拖拉机 ✓</span></div></div>
+      <div class="case" style="margin-top:16px"><span class="ct">案例 · 主牌拖拉机</span><br>主牌里允许跨类别连续：
+        <div class="hand" style="margin:10px 0;flex-wrap:nowrap"><i class="pc jk sm">小<b>王</b></i><i class="pc jk sm">小<b>王</b></i><span class="gap" style="width:6px"></span><i class="pc jk big r">大<b>王</b></i><i class="pc jk big r">大<b>王</b></i><span style="margin-left:14px;font-weight:700;color:#066b5a">= 王的拖拉机 ✓</span></div>
+        <span style="font-size:15px">有主局顺序：主花色普通牌 → 副级牌 → 主级牌 → 小王 → 大王</span></div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- 12 跟牌 -->
+<section class="slide d" style="--z:1.4" data-notes="<b>跟牌的核心：先跟门，再跟牌型，都“尽最大能力”。</b>有该门的牌必须跟该门，且尽量跟足张数；该门不够就全部打出，剩下的用别的牌补；完全没有该门就可以垫牌或毙牌。<br>领出对子时：有对子必须跟对子，没有对子才能跟两张散牌；不能为了保留大牌拆散本来能凑出的牌型。<br>案例里小乙领 ♠K♠K 对子，四家分别遇到四种情况。">
+<div class="in">
+  <div class="rise"><div class="kicker"><i>11</i> · 出牌与跟牌</div>
+  <h2>领出什么门，就必须<span class="hl-good">尽力跟什么门、什么牌型</span></h2>
+  <p class="lead">庄家先领第一墩，之后每一墩由<b>上一墩的赢家领出</b>，其余人按逆时针依次跟牌。</p></div>
+  <div class="g2" style="margin-top:20px;grid-template-columns:1fr 1.45fr">
+    <div class="panel rise" style="--d:.15s">
+      <h3>跟牌顺序</h3>
+      <ul><li><b>有该门</b>：必须跟该门</li><li>张数<b>够</b>就跟足同样张数</li><li>张数<b>不够</b>：该门全出，再用别的牌补足</li><li><b>完全没有</b>该门：垫任意副牌，或用主牌<b>毙牌</b></li><li>牌型：领对子<b>有对子必须跟对子</b>；没有对子才跟两张散牌</li></ul>
+    </div>
+    <div class="case rise" style="--d:.3s"><span class="ct">案例</span> 小乙领出 <i class="pc" style="width:34px;height:46px;font-size:15px;margin:0 3px;vertical-align:middle">K<b style="font-size:15px">♠</b></i><i class="pc" style="width:34px;height:46px;font-size:15px;margin:0 3px;vertical-align:middle">K<b style="font-size:15px">♠</b></i>（♠ 对子）
+      <table class="tbl" style="font-size:16px;margin-top:6px">
+        <tr><td style="width:60px"><b>小丙</b></td><td>手里有 ♠9♠9 对子和散牌 ♠A、♠3</td><td><span class="ok">必须出 ♠9♠9</span></td></tr>
+        <tr><td><b>小丁</b></td><td>♠ 够 2 张但<b>没有对子</b>：♠3、♠5</td><td><span class="ok">出 ♠3♠5（散牌）</span></td></tr>
+        <tr><td><b>小戊</b></td><td>♠ 只剩 <b>1 张</b> ♠7</td><td><span class="ok">先出 ♠7，再补 1 张别的牌</span></td></tr>
+        <tr><td><b>小甲</b></td><td>手里<b>一张 ♠ 都没有</b></td><td><span class="ok">垫牌，或用主牌毙牌</span></td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="warn rise" style="--d:.45s;margin-top:20px"><b>不能耍赖：</b>不能为了保留大牌，故意把本来能凑成的对子拆开；不合法的出牌系统会直接提示原因。</div>
+</div>
+</section>
+
+<!-- 13 一墩胜负 & 毙牌 -->
+<section class="slide a" style="--z:1.4" data-notes="<b>一墩谁赢？</b>只有完整对应了领出牌型的出牌，才有资格争夺这一墩。单张比单张，对子比对子点数，拖拉机比最高一对。同大的牌，先出的赢。<br><b>毙牌：</b>领出的是副牌，没有该门的人可以用主牌毙。但主牌必须张数、结构都对得上领出牌型才是有效毙牌，否则只算垫牌。<br>案例：小戊用主牌 ♥3 毙掉了 ♠K 这一墩，收下 25 分并领出下一墩。">
+<div class="in">
+  <div class="rise"><div class="kicker"><i>12</i> · 一墩胜负与毙牌</div>
+  <h2>没有该门的牌？用<span class="hl-good">主牌毙</span>，主牌压副牌</h2></div>
+  <div class="rise" style="--d:.15s;margin-top:20px">
+    <div class="case"><span class="ct">案例</span> 本局主花色 ♥。小乙领出单张 ♠K：
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-top:14px;text-align:center">
+        <div><div class="hand" style="justify-content:center"><i class="pc" data-p="10分">K<b>♠</b></i></div><div style="margin-top:8px"><b>小乙</b>（领出）</div></div>
+        <div><div class="hand" style="justify-content:center"><i class="pc">A<b>♠</b></i></div><div style="margin-top:8px"><b>小丙</b> 跟 ♠，最大的副牌</div></div>
+        <div><div class="hand" style="justify-content:center"><i class="pc r" data-p="5分">5<b>♦</b></i></div><div style="margin-top:8px"><b>小丁</b> 没有 ♠，垫牌</div></div>
+        <div><div class="hand" style="justify-content:center"><i class="pc r t">3<b>♥</b></i></div><div style="margin-top:8px"><b>小戊</b> 没有 ♠，<b>用主牌毙</b></div></div>
+        <div><div class="hand" style="justify-content:center"><i class="pc" data-p="10分">10<b>♠</b></i></div><div style="margin-top:8px"><b>小甲</b> 跟 ♠</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="g3 rise" style="--d:.3s;margin-top:22px">
+    <div class="panel"><h3>谁赢？</h3><p><b>小戊赢</b>：主牌 ♥3 压过所有副牌 ♠A。</p></div>
+    <div class="panel"><h3>得多少分？</h3><p>10(♠K) + 5(♦5) + 10(♠10) = <b style="color:var(--teal)">25 分</b>，小戊收下，并<b>领出下一墩</b>。</p></div>
+    <div class="panel"><h3>同大怎么办？</h3><p>同大的牌，<b>先出的人赢</b>。</p></div>
+  </div>
+  <div class="warn rise" style="--d:.45s;margin-top:20px"><b>毙牌要“成套”：</b>如果领出的是对子，毙牌的人也得出<b>一对主牌</b>才算有效毙牌；只出两张零散主牌，只能算“垫牌”，不能争这一墩。</div>
+</div>
+</section>
+
+<!-- 14 甩牌 -->
+<section class="slide b" style="--z:1.5" data-notes="<b>甩牌是进阶玩法，初学者可以先了解概念。</b>领出的人可以一次甩出同一门里的多个牌组（比如刻子+对子+单张），但不能混合不同花色，也不能混合主牌和副牌。<br>甩牌要成功，每一个牌组都必须“不可能被别人压过”。否则甩牌失败：你被迫改出“最小的、会被压的那一个牌组”（先比张数最少，再比点数最低）。失败不扣分。<br>案例：想甩 ♠A + ♠K，但别人手里还有一张 ♠A，能压住 ♠K，所以失败，被迫只出 ♠K。">
+<div class="in">
+  <div class="rise"><div class="kicker"><i>13</i> · 甩牌（进阶）</div>
+  <h2>一次甩出多个牌组：<span class="hl-good">每一组都压不住</span>才算成功</h2></div>
+  <div class="g2" style="margin-top:22px">
+    <div class="panel rise" style="--d:.15s">
+      <h3>规则要点</h3>
+      <ul><li>只能甩<b>同一门</b>里的牌：不能混不同副牌花色，也不能混主牌和副牌</li><li>成功条件：甩出的<b>每个牌组</b>，其他任何人在这一门里都<b>压不过</b></li><li>失败：改出<b>最小的、会被压的牌组</b>（先比张数最少，再比点数最低），<b>不扣分</b></li><li>别人跟甩：跟出<b>相同总张数</b>，并按 刻子拖拉机 → 刻子 → 对子拖拉机 → 对子 → 单张 的顺序尽量满足</li></ul>
+    </div>
+    <div class="rise" style="--d:.3s">
+      <div class="case"><span class="ct">案例 · 甩牌失败</span><br>小乙想甩 <i class="pc" style="width:34px;height:46px;font-size:15px;margin:0 4px;vertical-align:middle">A<b style="font-size:15px">♠</b></i><i class="pc" style="width:34px;height:46px;font-size:15px;margin:0 4px;vertical-align:middle">K<b style="font-size:15px">♠</b></i>，但小丙手里还有一张 ♠A，可以压住 ♠K。<br>→ <b>甩牌失败</b>，小乙被迫改出会被压的最小牌组：<b>只出 ♠K</b>。</div>
+      <div class="case" style="margin-top:16px;background:rgba(200,238,227,.7);color:#066b5a"><span class="ct" style="background:var(--teal)">案例 · 甩牌成功</span><br>小乙手握 ♠ 的<b>三张 A 全部</b>外加 ♠K 对子，场上再没有更大的 ♠。<br>→ 没人压得住，<b>甩牌成功</b>，其他人必须跟相同总张数。</div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- 15 得分与抠底 -->
+<section class="slide c" style="--z:1.5" data-notes="<b>抠底是翻盘的关键。</b>如果最后一墩是庄家方赢，底牌就不计入闲家分；如果最后一墩是闲家赢，就翻开底牌，把底牌里的分乘以一个倍数后加给闲家。<br>倍数由“最后一墩赢的牌型”决定：单张×2、对子×4、刻子×6，对子拖拉机含 n 对×2的n次方，刻子拖拉机含 n 个×3的n次方。<br>案例：底牌 25 分，闲家用两连对赢最后一墩，×4=100，闲家本来只有 60 分，变成 160，超过 140，反败为胜。">
+<div class="in">
+  <div class="rise"><div class="kicker"><i>14</i> · 得分与抠底</div>
+  <h2>最后一墩很关键：闲家赢了，要<span class="hl-good">翻底牌乘倍数</span></h2></div>
+  <div class="g2" style="margin-top:20px;grid-template-columns:1.1fr 1fr">
+    <div class="rise" style="--d:.15s">
+      <div class="panel"><h3>规则</h3><ul><li>每一墩的分牌，归<b>赢这一墩的人</b></li><li><b>庄家方</b>赢最后一墩：底牌不计入闲家分</li><li><b>闲家</b>赢最后一墩：翻开底牌，底牌分 × 倍数 加到闲家分</li></ul></div>
+      <div class="panel" style="margin-top:16px"><h3>抠底倍数（看最后一墩赢家的牌型）</h3>
+        <table class="tbl" style="font-size:16px">
+          <tr><td>单张 <b class="n">×2</b></td><td>对子 <b class="n">×4</b></td><td>刻子 <b class="n">×6</b></td></tr>
+          <tr><td colspan="3">n 连对：<b>×2ⁿ</b>（两连对×4、三连对×8）　n 连刻：<b>×3ⁿ</b>（两连刻×9、三连刻×27）</td></tr>
+        </table></div>
+    </div>
+    <div class="case rise" style="--d:.3s"><span class="ct">案例 · 一把翻盘</span><br>
+      底牌：<span class="hand" style="display:inline-flex;vertical-align:middle;margin:18px 0 6px"><i class="pc" data-p="10分" style="width:38px;height:52px;font-size:16px">K<b style="font-size:16px">♠</b></i><i class="pc r" data-p="10分" style="width:38px;height:52px;font-size:16px">10<b style="font-size:16px">♦</b></i><i class="pc r" data-p="5分" style="width:38px;height:52px;font-size:16px">5<b style="font-size:16px">♥</b></i><i class="pc" style="width:38px;height:52px;font-size:16px">3<b style="font-size:16px">♣</b></i><i class="pc" style="width:38px;height:52px;font-size:16px">8<b style="font-size:16px">♠</b></i><i class="pc r" style="width:38px;height:52px;font-size:16px">2<b style="font-size:16px">♦</b></i><i class="pc" style="width:38px;height:52px;font-size:16px">6<b style="font-size:16px">♣</b></i></span><br>
+      底牌分 = 10+10+5 = <b>25 分</b>。<br>
+      闲家前面一共拿了 <b>60 分</b>，不到 140，眼看要输；<br>
+      但闲家用<b>两连对</b>赢下最后一墩 → 25 × 4 = <b>100 分</b>。<br>
+      60 + 100 = <b>160 分 ≥ 140</b> → <b style="color:var(--teal)">闲家反败为胜！</b>
+      <div class="bar2" style="grid-template-columns:90px 1fr 70px;margin-top:14px"><span>抠底前</span><div class="track" style="overflow:visible"><div class="fill w" style="--w:30%"></div><div class="mark" style="left:70%"></div></div><span class="v" style="color:var(--coral)">60</span></div>
+      <div class="bar2" style="grid-template-columns:90px 1fr 70px;margin:6px 0 0"><span>抠底后</span><div class="track" style="overflow:visible"><div class="fill" style="--w:80%"></div><div class="mark" style="left:70%"></div></div><span class="v">160</span></div>
+      <div style="font-size:13px;color:#8a5a06;margin-top:4px;padding-left:102px">▲ 黑色竖线 = 胜负线 140 分（满刻度 200）</div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- 16 胜负线与升级 -->
+<section class="slide d" style="--z:1.3" data-notes="<b>胜负线：</b>正常局闲家≥140 赢；一打四闲家≥180 赢。<br><b>升级规则要点：</b>先看“基础奖励”——胜方里本局开始就在台上的人升 1 级；本局开始在台下的人，基础奖励变成“上台”，不涨级。再看“额外升级”，每个人独立计算。<br>庄家方赢：闲家分 70 到胜负线以下 +0；1～69 分 +1；0 分 +2。闲家方赢：正常局每多完整的 70 分额外 +1，一打四每多 90 分 +1。<br>案例里闲家拿到 235：额外 ⌊(235-140)/70⌋=1，台上的闲家升 2 级，台下的闲家上台并升 1 级，庄家方全部下台。">
+<div class="in">
+  <div class="rise"><div class="kicker"><i>15</i> · 胜负线与升级</div>
+  <h2>140 分是正常局的“生死线”，<span class="hl-good">多拿分还能多升级</span></h2></div>
+  <div class="rise" style="--d:.15s;margin-top:18px">
+    <div class="bar2" style="grid-template-columns:130px 1fr 110px"><span>闲家 235 分</span><div class="track" style="height:30px"><div class="fill" style="--w:78%"></div><div class="mark" style="left:46.7%"></div><div class="mark" style="left:23.3%;background:#b8b2a5"></div><div class="mark" style="left:70%;background:#b8b2a5"></div></div><span class="v">0 ~ 300</span></div>
+    <div style="margin:2px 0 0 142px;width:calc(100% - 276px);position:relative;height:22px;font-size:13px;color:var(--muted)"><span style="position:absolute;left:23.3%;transform:translateX(-50%)">70</span><span style="position:absolute;left:46.7%;transform:translateX(-50%);color:var(--ink);font-weight:800">140 胜负线</span><span style="position:absolute;left:70%;transform:translateX(-50%)">210</span></div>
+  </div>
+  <div class="g2" style="margin-top:14px">
+    <div class="panel rise" style="--d:.3s"><h3>庄家方赢（闲家没到线）</h3>
+      <table class="tbl" style="font-size:16px"><tr><th>闲家得分</th><th>原台上的庄家方共升</th></tr>
+        <tr><td>70 ~ 线以下</td><td><b class="n">1</b> 级</td></tr><tr><td>1 ~ 69</td><td><b class="n">2</b> 级</td></tr><tr><td>0（零分）</td><td><b class="n">3</b> 级</td></tr></table>
+      <h3 style="margin-top:14px">闲家方赢（正常局）</h3>
+      <table class="tbl" style="font-size:16px"><tr><td>140~209：<b class="n">1</b> 级</td><td>210~279：<b class="n">2</b> 级</td></tr><tr><td>280~349：<b class="n">3</b> 级</td><td>350~419：<b class="n">4</b> 级</td></tr></table>
+      <p style="font-size:14px;margin-top:6px">公式：额外 = ⌊(闲家分−140)÷70⌋。一打四：线 180，每多 90 分 +1 级。</p>
+    </div>
+    <div class="case rise" style="--d:.45s"><span class="ct">案例</span><br>正常局，闲家（小乙、小丙、小戊）合计拿到 <b>235 分</b>：<br>• 235 ≥ 140 → <b>闲家赢</b><br>• 额外升级 = ⌊(235−140)÷70⌋ = <b>1 级</b><br>• 小乙（本局开始在<b>台上</b>）：基础 1 + 额外 1 = <b>升 2 级</b><br>• 小丙（本局开始在<b>台下</b>）：基础变成上台，只拿额外 → <b>上台 + 升 1 级</b><br>• 庄家小甲、朋友小丁：<b>全部下台</b></div>
+  </div>
+</div>
+</section>
+
+<!-- 17 A 级与最终胜利 -->
+<section class="slide a" style="--z:1.5" data-notes="<b>怎么才算“赢下整场游戏”？</b>级别到 A 就封顶，不会循环回 2，也不会立刻赢。<br>四种最终胜利：① 一打四时，庄家赢了这一局，直接赢整场（不看级别）；② A 级玩家亲自当庄，并且找到朋友的正常局里赢；③ A 级玩家被找到成为朋友，台上状态下庄家方赢且闲家低于 60 分；④ 如果这个 A 级朋友在台下，要闲家得 0 分才行。<br>多人同时满足则共同获胜。">
+<div class="in">
+  <div class="rise"><div class="kicker"><i>16</i> · A 级与最终胜利</div>
+  <h2>升到 A 只是封顶，要赢下<span class="hl-good">整场</span>还得满足条件</h2>
+  <p class="lead">A 之后不会循环回 2，也不会自动赢。想拿“最终胜利”，有这几条路：</p></div>
+  <div class="g2" style="margin-top:22px;grid-template-columns:1.1fr 1fr">
+    <div class="rise" style="--d:.15s">
+      <div class="panel" style="padding:8px 26px">
+        <div style="display:grid;grid-template-columns:44px 1fr;gap:6px 14px;align-items:start;padding:10px 0;border-bottom:1px solid var(--line)"><div class="n" style="font-size:34px">1</div><div style="font-size:17px;color:var(--ink2);line-height:1.6"><b style="color:var(--ink)">一打四庄家获胜</b>：没找到朋友、庄家守住 → 直接赢下整场，<b>不看级别</b></div></div>
+        <div style="display:grid;grid-template-columns:44px 1fr;gap:6px 14px;align-items:start;padding:10px 0;border-bottom:1px solid var(--line)"><div class="n" style="font-size:34px">2</div><div style="font-size:17px;color:var(--ink2);line-height:1.6"><b style="color:var(--ink)">A 级庄家</b>：亲自坐庄、<b>找到朋友</b>的正常局里获胜</div></div>
+        <div style="display:grid;grid-template-columns:44px 1fr;gap:6px 14px;align-items:start;padding:10px 0;border-bottom:1px solid var(--line)"><div class="n" style="font-size:34px">3</div><div style="font-size:17px;color:var(--ink2);line-height:1.6"><b style="color:var(--ink)">A 级朋友（台上）</b>：庄家方赢，且闲家 <b>&lt; 60 分</b></div></div>
+        <div style="display:grid;grid-template-columns:44px 1fr;gap:6px 14px;align-items:start;padding:10px 0"><div class="n" style="font-size:34px">4</div><div style="font-size:17px;color:var(--ink2);line-height:1.6"><b style="color:var(--ink)">A 级朋友（台下）</b>：庄家方赢，且闲家 <b>= 0 分</b></div></div>
+      </div>
+    </div>
+    <div class="rise" style="--d:.3s">
+      <div class="case"><span class="ct">案例</span><br>小乙是 <b>A 级、在台上</b>，被庄家小甲找成了朋友。庄家方赢了这局，闲家只拿到 <b>55 分（&lt; 60）</b>。<br>→ 小乙<b>取得整场最终胜利</b>！<br><br>如果小乙当时在<b>台下</b>，就需要闲家 <b>0 分</b>才行。</div>
+      <div class="tip" style="margin-top:16px"><b>补充：</b>必须<b>真的找到并公开</b>朋友才算；多人同时满足条件则<b>共同获胜</b>。</div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- 18 完整案例 -->
+<section class="slide b" style="--z:1.35" data-notes="<b>用迷你版把前面所有规则串一遍。</b>全员 5 级、台上。小乙亮两张 5♥，小丙亮三张 5♣ 反主（三张＞两张）。五人确认不反后，小丙是庄家。小丙扣底后指定“第 2 张 ♦A”。第 4 墩小丁打出第 2 张 ♦A，成为朋友。最终闲家 120 分，没到 140，庄家方赢。因为闲家 ≥70，所以庄家方基础升 1 级、没有额外。小丙、小丁从 5 升到 10，其余三家下台。">
+<div class="in">
+  <div class="rise"><div class="kicker"><i>17</i> · 完整案例</div>
+  <h2>用<span class="hl-good">迷你版</span>走一遍完整的一局</h2>
+  <p class="lead">五人：小甲、小乙、小丙、小丁、小戊，全员 <b>5 级 · 台上</b>（迷你版 5 → 10 → K → A）。</p></div>
+  <div class="flow rise" style="--d:.15s;margin-top:22px">
+    <div class="step"><div class="no2">1</div><h4>发牌亮主</h4><p>小乙亮两张 <b>5♥</b>；小丙亮<b>三张 5♣</b> 反主（三张＞两张）。</p></div>
+    <div class="step"><div class="no2">2</div><h4>定庄</h4><p>五人都点“不反”。小丙台上自己亮，<b>小丙当庄</b>，主花色 ♣，级牌 5。</p></div>
+    <div class="step"><div class="no2">3</div><h4>扣底指定</h4><p>小丙拿底扣底，声明朋友牌：<b>第 2 张 ♦A</b>。</p></div>
+    <div class="step"><div class="no2">4</div><h4>朋友现身</h4><p>第 4 墩小丁打出第 2 张 ♦A → <b>小丁是朋友</b>。</p></div>
+    <div class="step"><div class="no2">5</div><h4>结算</h4><p>闲家（甲、乙、戊）合计 <b>120 分 &lt; 140</b>，庄家方赢。</p></div>
+  </div>
+  <div class="g2 rise" style="--d:.3s;margin-top:22px">
+    <div class="case"><span class="ct">结果</span><br>闲家 120 ≥ 70，没有额外升级：<br>• 小丙、小丁（台上）：基础 <b>升 1 级，5 → 10</b>，继续留在台上<br>• 小甲、小乙、小戊：<b>下台</b>，级别不变，下一局只能“代亮”</div>
+    <div class="tip"><b>下一局：</b>发牌标记逆时针移一位；小丙、小丁是 10 级台上，小甲、小乙、小戊 5 级台下。台下的人这局就不能自己当庄。</div>
+  </div>
+</div>
+</section>
+
+<!-- 19 常见误区 -->
+<section class="slide c" style="--z:1.35" data-notes="<b>新手最容易错的几件事。</b>建议对照前面案例，逐条自测。">
+<div class="in">
+  <div class="rise"><div class="kicker"><i>18</i> · 新手易错点</div>
+  <h2>这 6 件事，新手最容易记反</h2></div>
+  <div class="g3" style="margin-top:22px;grid-template-columns:1fr 1fr;gap:20px 40px;align-items:stretch">
+    <div class="panel rise" style="--d:.1s"><h3 style="color:var(--coral)">✗ “级牌最小”</h3><p>错。本局级牌（还有主花色牌）会<b>升入主牌区</b>，比所有副牌都大；A 虽是最大的普通牌，但级牌 7 成了主牌后，比任何副牌 A 都大。</p></div>
+    <div class="panel rise" style="--d:.2s"><h3 style="color:var(--coral)">✗ “反主比花色或级别”</h3><p>错。反主<b>只比张数</b>：三张＞两张＞一张；张数一样，先亮的保留，<b>后亮的不能反</b>。</p></div>
+    <div class="panel rise" style="--d:.3s"><h3 style="color:var(--coral)">✗ “朋友牌想选谁都行”</h3><p>错。不能是<b>王、级牌、主花色牌</b>，必须是副牌。</p></div>
+    <div class="panel rise" style="--d:.4s"><h3 style="color:var(--coral)">✗ “台下的人也能当庄”</h3><p>错。只有<b>台上</b>玩家能当庄家；台下玩家只能<b>代亮</b>台上玩家的级牌。</p></div>
+    <div class="panel rise" style="--d:.5s"><h3 style="color:var(--coral)">✗ “庄家可以自己当朋友”</h3><p>错。指定的那一张若是<b>庄家自己</b>打出的，立刻判定<b>找朋友失败</b>，变一打四（线 180 分）。</p></div>
+    <div class="panel rise" style="--d:.6s"><h3 style="color:var(--coral)">✗ “朋友现身前赢的分白赢了”</h3><p>错。朋友之前赢的墩和分，会<b>追溯计入庄家方</b>。</p></div>
+  </div>
+</div>
+</section>
+
+<!-- 20 试玩与源码 -->
+<section class="slide d" style="--z:1.5" data-notes="<b>想亲手玩一下：</b>仓库自带 Docker，一条命令就能起服务。空座会由机器人补满，所以一个人也能玩；迷你版 5→10→K→A，一整场很快打完。<br><b>想看规则怎么落到代码：</b>规则引擎全部在 packages/shared/src。bids.ts 是亮主反主，friend.ts 是朋友牌，patterns.ts 是牌型，follow.ts 是跟牌，lead.ts 是甩牌，trick.ts 是一墩胜负，scoring.ts 是结算升级，ranking.ts 是牌序，levels.ts 是级别。每个文件旁边都有对应测试。">
+<div class="in">
+  <div class="rise"><div class="kicker"><i>19</i> · 动手试玩与源码导读</div>
+  <h2>一条命令开一局，机器人自动<span class="hl-good">补满空座</span></h2></div>
+  <div class="g2" style="margin-top:22px;grid-template-columns:1fr 1.1fr">
+    <div class="rise" style="--d:.15s">
+      <div class="panel"><h3>本地试玩</h3>
+        <div style="background:#141b2b;color:#c9f2e6;border-radius:14px;padding:14px 18px;font-family:'SF Mono',Menlo,monospace;font-size:12.5px;line-height:1.8;margin:6px 0 10px">git clone https://github.com/juicedata/findfriend<br>cd findfriend<br>docker compose up --build -d<br><span style="color:#7a8bb0"># 浏览器打开 http://localhost:3030</span></div>
+        <ul><li>昵称即用，<b>无需注册</b>；一个房间，空座由<b>机器人</b>补足</li><li>可选<b>迷你版</b>（5→10→K→A），一场很快打完</li><li>房主可启动<b>五机器人演示</b>，看它们怎么打（支持 1×/4×）</li></ul></div>
+    </div>
+    <div class="rise" style="--d:.3s">
+      <div class="panel"><h3>规则 → 源码对照</h3>
+        <table class="tbl" style="font-size:16px">
+          <tr><td style="width:150px"><b>亮主 / 反主 / 定庄</b></td><td>bids.ts</td></tr>
+          <tr><td><b>朋友牌</b></td><td>friend.ts</td></tr>
+          <tr><td><b>牌序 / 牌型</b></td><td>ranking.ts · patterns.ts</td></tr>
+          <tr><td><b>跟牌 / 甩牌</b></td><td>follow.ts · lead.ts</td></tr>
+          <tr><td><b>一墩胜负</b></td><td>trick.ts</td></tr>
+          <tr><td><b>得分 / 升级</b></td><td>scoring.ts · levels.ts</td></tr>
+          <tr><td><b>牌数常量</b></td><td>deck.ts（162 / 31 / 7）</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+  <p class="foot">源码目录 packages/shared/src · 完整规则原文：github.com/juicedata/findfriend/blob/main/rule.md · 机器人策略：strategy.md</p>
+</section>
+
+</div>
+
+<script>
+(function(){
+  var stage=document.getElementById('stage');
+  var slides=[].slice.call(stage.querySelectorAll('.slide'));
+  var bar=document.getElementById('bar'),pg=document.getElementById('pg');
+  var cur=0;
+
+  function fit(){stage.style.setProperty('--s',Math.min(innerWidth/1600,innerHeight/900))}
+  addEventListener('resize',fit);fit();
+
+  function go(i){
+    cur=Math.max(0,Math.min(slides.length-1,i));
+    slides.forEach(function(s,k){s.classList.toggle('active',k===cur)});
+    bar.style.width=((cur+1)/slides.length*100)+'%';
+    pg.textContent=(cur+1)+' / '+slides.length;
+    history.replaceState(null,'','#'+(cur+1));
+  }
+  document.getElementById('prev').onclick=function(){go(cur-1)};
+  document.getElementById('next').onclick=function(){go(cur+1)};
+  addEventListener('keydown',function(e){
+    if(e.metaKey||e.ctrlKey||e.altKey)return;
+    var k=e.key;
+    if(k==='ArrowRight'||k==='ArrowDown'||k==='PageDown'||k===' '){e.preventDefault();go(cur+1)}
+    else if(k==='ArrowLeft'||k==='ArrowUp'||k==='PageUp'){e.preventDefault();go(cur-1)}
+    else if(k==='Home')go(0);
+    else if(k==='End')go(slides.length-1);
+    else if(k==='f'||k==='F'){document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen()}
+  });
+  var n=parseInt((location.hash||'').slice(1),10);
+  go(n>0?n-1:0);
+
+  // keep runtime state out of the saved file
+  window.liveEditBeforeSerialize=function(root){
+    root.querySelectorAll('.slide').forEach(function(s){s.classList.remove('active')});
+    root.querySelector('#stage').removeAttribute('style');
+    root.querySelector('#bar').removeAttribute('style');
+    root.querySelector('#pg').textContent='';
+  };
+})();
+</script>
+<!-- live-edit:start v2 -->
+<style data-le-ui>
+#le-root{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue","Microsoft YaHei",sans-serif}
+#le-root .le-hint{position:fixed;left:12px;bottom:12px;z-index:2147483000;font-size:12px;color:#8b8578;background:rgba(255,255,255,.75);
+  border-radius:99px;padding:3px 10px;user-select:none;pointer-events:none}
+#le-root[data-le-hint="off"] .le-hint,html.le-editing #le-root .le-hint{display:none}
+#le-root .le-bar{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);display:none;gap:8px;align-items:center;z-index:2147483001;
+  background:#141b2b;color:#fff;border-radius:99px;padding:6px 8px 6px 18px;font-size:13px;box-shadow:0 8px 30px rgba(0,0,0,.25)}
+html.le-editing #le-root .le-bar{display:flex}
+#le-root .le-bar button{border:0;border-radius:99px;padding:6px 14px;cursor:pointer;font-size:13px;background:#2c3550;color:#fff}
+#le-root .le-bar button.le-pri{background:#2849d6}
+#le-root .le-state a{color:#7fe3cf}
+#le-root .le-toast{position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:2147483002;background:#141b2b;color:#fff;font-size:14px;
+  padding:9px 18px;border-radius:99px;opacity:0;transition:opacity .3s;pointer-events:none}
+#le-root .le-toast.on{opacity:1}
+html.le-editing [contenteditable] :hover{outline:1px dashed rgba(40,73,214,.45);outline-offset:3px}
+#le-root .le-notes{position:fixed;left:0;right:0;bottom:0;z-index:2147483000;display:none;max-height:42vh;overflow:auto;
+  background:rgba(20,27,43,.95);color:#f3e7cc;padding:16px 6vw 22px;font-size:17px;line-height:1.8;box-shadow:0 -10px 40px rgba(0,0,0,.2)}
+#le-root .le-notes.on{display:block}
+html.le-editing #le-root .le-notes{padding-bottom:70px}
+#le-root .le-notes-h{font-size:13px;letter-spacing:.12em;color:#f2b544;font-weight:700;margin-bottom:6px}
+#le-root .le-notes-b{min-height:1.8em;outline:none}
+#le-root .le-notes-b b,#le-root .le-notes-b strong{color:#fff}
+#le-root .le-notes-b:empty::before{content:attr(data-ph);color:#8d8a80}
+html.le-editing #le-root .le-notes-b{outline:1px dashed rgba(242,181,68,.6);outline-offset:4px}
+</style>
+<div id="le-root" data-le-ui data-le-hint="off" data-le-version="" data-gh-owner="jerrycaimin" data-gh-repo="jerrycaimin.github.io" data-gh-branch="main" data-site="https://jerrycaimin.github.io/">
+  <div class="le-hint">N 讲稿 · E 编辑</div>
+  <div class="le-notes"><div class="le-notes-h">讲稿</div><div class="le-notes-b" data-ph="（暂无讲稿，按 E 进入编辑后在这里输入）"></div></div>
+  <div class="le-bar"><span class="le-state">编辑模式：直接点文字修改</span><button data-act="notes">讲稿 ⌥N</button><button data-act="save">保存本地 ⌘S</button><button data-act="pub" class="le-pri">发布上线 ⌘⇧S</button><button data-act="exit">退出 ⌥E</button></div>
+  <div class="le-toast"></div>
+</div>
+<script data-le-ui>
+/* live-edit v2 — in-page edit, speaker notes, local save, publish to GitHub Pages. Docs: ~/.agents/skills/html-live-edit/SKILL.md */
+(function(){
+  if(window.__liveEdit)return;window.__liveEdit=true;
+  var root=document.getElementById('le-root'),html=document.documentElement;
+  var cfg={owner:root.dataset.ghOwner,repo:root.dataset.ghRepo,branch:root.dataset.ghBranch||'main',site:root.dataset.site};
+  var state=root.querySelector('.le-state'),toastEl=root.querySelector('.le-toast');
+  var editing=false,dirty=false,fileHandle=null,timer=null;
+  var STATE0=state.textContent;
+
+  function toast(t,ms){toastEl.textContent=t;toastEl.classList.add('on');clearTimeout(toast.t);if(ms!==0)toast.t=setTimeout(function(){toastEl.classList.remove('on')},ms||2200)}
+  function now(){return new Date().toTimeString().slice(0,8)}
+
+  // editable regions: [data-le-editable] if the page declares any, otherwise every top-level body element
+  function targets(){
+    var marked=document.querySelectorAll('[data-le-editable]');
+    if(marked.length)return [].slice.call(marked);
+    return [].filter.call(document.body.children,function(el){return !el.hasAttribute('data-le-ui')&&!/^(SCRIPT|STYLE|TEMPLATE|NOSCRIPT|LINK)$/.test(el.tagName)});
+  }
+  function setEdit(on){
+    editing=on;html.classList.toggle('le-editing',on);
+    targets().forEach(function(el){if(on)el.setAttribute('contenteditable','true');else el.removeAttribute('contenteditable')});
+    if(!on){if(document.activeElement)document.activeElement.blur();notesOn(false);if(dirty)save(true)}
+    else notesBody.setAttribute('contenteditable','true');
+    if(!on)notesBody.removeAttribute('contenteditable');
+    toast(on?'编辑模式：点文字直接修改':'已退出编辑');
+    window.dispatchEvent(new CustomEvent('liveedit:mode',{detail:{editing:on}}));
+  }
+  function markDirty(){dirty=true;state.textContent='未保存…';clearTimeout(timer);timer=setTimeout(function(){save(true)},1500)}
+  document.addEventListener('input',function(e){if(editing&&e.target.isContentEditable)markDirty()},true);
+  document.addEventListener('paste',function(e){
+    if(!editing||!e.target.isContentEditable)return;e.preventDefault();
+    document.execCommand('insertText',false,(e.clipboardData||window.clipboardData).getData('text/plain'));
+  },true);
+  // pages that change other editable data (e.g. speaker notes in data-* attributes) call this
+  window.liveEditMarkDirty=markDirty;
+
+  // speaker notes: stored as HTML in data-notes on the current "scope" element
+  // scope = page hook liveEditNotesTarget() || active slide || #le-root (page-level notes)
+  var notesEl=root.querySelector('.le-notes'),notesBody=root.querySelector('.le-notes-b'),notesHead=root.querySelector('.le-notes-h');
+  var notesScope=null;
+  function scope(){
+    var t=typeof window.liveEditNotesTarget==='function'&&window.liveEditNotesTarget();
+    return t||document.querySelector('.slide.active,section.active,[data-le-notes-scope].active')||root;
+  }
+  function renderNotes(){
+    if(!notesEl.classList.contains('on')||notesBody.contains(document.activeElement))return;
+    notesScope=scope();
+    notesBody.innerHTML=notesScope.getAttribute('data-notes')||'';
+    notesHead.textContent=notesScope===root?'讲稿 · 本页':'讲稿 · 当前页';
+  }
+  function notesOn(on){notesEl.classList.toggle('on',on);if(on)renderNotes()}
+  function toggleNotes(){if(root.dataset.leNotes!=='off')notesOn(!notesEl.classList.contains('on'))}
+  notesBody.addEventListener('input',function(){if(notesScope)notesScope.setAttribute('data-notes',notesBody.innerHTML)});
+  // follow slide changes made by the page's own navigation
+  var mo=new MutationObserver(function(){if(notesEl.classList.contains('on')&&scope()!==notesScope)renderNotes()});
+  mo.observe(document.body,{attributes:true,attributeFilter:['class'],subtree:true});
+  addEventListener('hashchange',renderNotes);
+
+  function serialize(ver){
+    var r=html.cloneNode(true);
+    r.classList.remove('le-editing');if(!r.getAttribute('class'))r.removeAttribute('class');
+    r.querySelectorAll('[contenteditable]').forEach(function(x){x.removeAttribute('contenteditable')});
+    var lr=r.querySelector('#le-root');
+    if(ver)lr.setAttribute('data-le-version',ver);
+    lr.querySelector('.le-toast').className='le-toast';lr.querySelector('.le-toast').textContent='';
+    lr.querySelector('.le-state').textContent=STATE0;
+    lr.querySelector('.le-notes').className='le-notes';
+    lr.querySelector('.le-notes-b').innerHTML='';
+    lr.querySelector('.le-notes-h').textContent='讲稿';
+    // page hook: undo runtime DOM changes (active classes, inline styles, generated nodes) before saving
+    if(typeof window.liveEditBeforeSerialize==='function')window.liveEditBeforeSerialize(r);
+    return '<!DOCTYPE html>\n'+r.outerHTML+'\n';
+  }
+
+  // local save: File System Access API; handle remembered in IndexedDB so the picker appears only once
+  function idb(write,val){
+    return new Promise(function(res){
+      try{
+        var q=indexedDB.open('live-edit',1);
+        q.onupgradeneeded=function(){q.result.createObjectStore('h')};
+        q.onsuccess=function(){
+          var st=q.result.transaction('h',write?'readwrite':'readonly').objectStore('h');
+          var x=write?st.put(val,location.pathname):st.get(location.pathname);
+          x.onsuccess=function(){res(x.result)};x.onerror=function(){res(null)};
+        };
+        q.onerror=function(){res(null)};
+      }catch(e){res(null)}
+    });
+  }
+  idb(false).then(function(h){if(h)fileHandle=h});
+  // quiet=true is autosave: never opens a picker/prompt, silently skips if not yet authorized
+  async function save(quiet){
+    clearTimeout(timer);
+    var out=serialize(),name=decodeURIComponent(location.pathname.split('/').pop()||'index.html');
+    if(window.showSaveFilePicker){
+      try{
+        if(fileHandle){
+          if(await fileHandle.queryPermission({mode:'readwrite'})!=='granted'){
+            if(quiet){state.textContent='⌘S 可保存到本地';return}
+            if(await fileHandle.requestPermission({mode:'readwrite'})!=='granted')return;
+          }
+        }else{
+          if(quiet){state.textContent='⌘S 可保存到本地';return}
+          fileHandle=await showSaveFilePicker({suggestedName:name,types:[{description:'HTML',accept:{'text/html':['.html']}}]});
+          idb(true,fileHandle);
+        }
+        var w=await fileHandle.createWritable();await w.write(out);await w.close();
+        dirty=false;state.textContent='已保存到本地 '+now();
+        if(!quiet)toast('已保存到 '+fileHandle.name);return;
+      }catch(e){if(e.name==='AbortError')return;fileHandle=null}
+    }
+    if(quiet)return;
+    var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([out],{type:'text/html'}));a.download=name;a.click();
+    dirty=false;toast('已下载 '+name+'，覆盖原文件即可');
+  }
+  addEventListener('beforeunload',function(e){if(dirty){e.preventDefault();e.returnValue=''}});
+
+  // publish: GitHub Contents API, token only in this browser's localStorage
+  var siteHost=new URL(cfg.site).hostname;
+  function repoPath(){
+    var p=decodeURIComponent(location.pathname);
+    if(location.hostname===siteHost)p=p.slice(new URL(cfg.site).pathname.length);
+    else{var i=p.indexOf('/'+cfg.repo+'/');p=i>=0?p.slice(i+cfg.repo.length+2):p.split('/').pop()}
+    if(!p||p.slice(-1)==='/')p+='index.html';
+    return p.replace(/^\//,'');
+  }
+  function enc(p){return p.split('/').map(encodeURIComponent).join('/')}
+  function b64utf8(s){var b=new TextEncoder().encode(s),o='';for(var i=0;i<b.length;i+=0x8000)o+=String.fromCharCode.apply(null,b.subarray(i,i+0x8000));return btoa(o)}
+  async function publish(){
+    var key='le-gh-token:'+cfg.owner+'/'+cfg.repo,token=localStorage.getItem(key);
+    if(!token){
+      token=prompt('首次发布：粘贴 GitHub Fine-grained Token\n（仅授权 '+cfg.repo+' 仓库，Contents: Read and write）\n只保存在本浏览器，不会写进 HTML');
+      if(!token)return;token=token.trim();localStorage.setItem(key,token);
+    }
+    var path=repoPath(),api='https://api.github.com/repos/'+cfg.owner+'/'+cfg.repo+'/contents/'+enc(path);
+    var hd={'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json'};
+    toast('正在发布 '+path+' …',0);
+    try{
+      var g=await fetch(api+'?ref='+cfg.branch,{headers:hd,cache:'no-store'});
+      if(g.status===401){localStorage.removeItem(key);toast('Token 无效或已过期，请重新发布并输入');return}
+      var sha=g.ok?(await g.json()).sha:undefined,ver=Date.now().toString(36);
+      var r=await fetch(api,{method:'PUT',headers:hd,body:JSON.stringify({message:'update '+path+' via live-edit',content:b64utf8(serialize(ver)),sha:sha,branch:cfg.branch})});
+      if(!r.ok){
+        var m=(await r.json().catch(function(){return{}})).message||r.status;
+        if(r.status===401||r.status===403)localStorage.removeItem(key);
+        toast('发布失败：'+m,5000);return;
+      }
+      root.setAttribute('data-le-version',ver);dirty=false;state.textContent='已发布 '+now();
+      waitLive(path,ver);
+    }catch(e){toast('发布失败：'+e.message,5000)}
+  }
+
+  // GitHub Pages rebuilds in ~1 min and its CDN caches HTML for 10 min; a unique ?v= bypasses the CDN cache
+  function liveUrl(path){return cfg.site.replace(/\/?$/,'/')+enc(path)}
+  async function liveVersion(path){
+    var t=await (await fetch(liveUrl(path)+'?v='+Date.now(),{cache:'no-store'})).text();
+    var m=t.match(/id="le-root"[^>]*data-le-version="([0-9a-z]*)"/);
+    return m?m[1]:'';
+  }
+  async function waitLive(path,ver){
+    var t0=Date.now(),ok=false;
+    while(!ok&&Date.now()-t0<300000){
+      toast('已发布，等待网站生效… '+Math.round((Date.now()-t0)/1000)+'s',0);
+      try{ok=await liveVersion(path)===ver}catch(e){}
+      if(!ok)await new Promise(function(r){setTimeout(r,5000)});
+    }
+    if(!ok){toast('网站 5 分钟内未生效，请稍后刷新',5000);return}
+    var url=liveUrl(path)+'?v='+ver+location.hash;
+    if(location.hostname===siteHost&&!dirty){location.replace(url);return}
+    toast('网站已更新 ✓',4000);
+    state.innerHTML='<a href="'+url+'" target="_blank">网站已更新，点此查看</a>';
+  }
+  // visitors served a stale CDN copy jump to the newest published version
+  if(location.hostname===siteHost){
+    liveVersion(repoPath()).then(function(v){
+      var mine=root.getAttribute('data-le-version');
+      if(v&&parseInt(v,36)>(parseInt(mine,36)||0)&&!dirty)location.replace(location.pathname+'?v='+v+location.hash);
+    }).catch(function(){});
+  }
+
+  // capture phase: our shortcuts win, and while typing the page's own shortcuts (arrows, space…) are blocked
+  addEventListener('keydown',function(e){
+    var k=e.key,mod=e.metaKey||e.ctrlKey,t=e.target;
+    var typing=t.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName);
+    function take(){e.preventDefault();e.stopImmediatePropagation()}
+    if(mod&&e.shiftKey&&e.code==='KeyS'){take();publish();return}
+    if(mod&&!e.shiftKey&&e.code==='KeyS'){take();save();return}
+    if(e.altKey&&e.code==='KeyE'){take();setEdit(!editing);return}
+    if(e.altKey&&e.code==='KeyN'){take();toggleNotes();return}
+    if(editing&&typing){if(k==='Escape'){t.blur();take()}else if(!mod&&!e.altKey)e.stopImmediatePropagation();return}
+    if(!typing&&!mod&&!e.altKey&&(k==='e'||k==='E')){take();setEdit(!editing);return}
+    if(!typing&&!mod&&!e.altKey&&(k==='n'||k==='N')&&root.dataset.leNotes!=='off'){take();toggleNotes();return}
+    if(editing&&k==='Escape'){take();setEdit(false)}
+  },true);
+  root.querySelector('[data-act=notes]').onclick=toggleNotes;
+  root.querySelector('[data-act=save]').onclick=function(){save()};
+  root.querySelector('[data-act=pub]').onclick=publish;
+  root.querySelector('[data-act=exit]').onclick=function(){setEdit(false)};
+  window.liveEditSerialize=serialize;
+})();
+</script>
+<!-- live-edit:end -->
+</body></html>
