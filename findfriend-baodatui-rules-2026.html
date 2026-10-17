@@ -166,7 +166,7 @@ html.le-editing .stage [contenteditable] :hover{outline:1px dashed rgba(40,73,21
 <section class="slide a" style="--z:1.15" data-notes="<b>开场：</b>《抱大腿》的正式名字是“找朋友”，是一个 5 人用 3 副牌的升级类扑克游戏。“抱大腿”的意思就是：庄家要在牌局里偷偷找到一个强力队友（大腿）。<br>这份材料按公司仓库 juicedata/findfriend 的 rule.md 和 packages/shared 里的规则引擎整理，全部数字都和代码一致。">
 <div class="in">
   <div class="rise"><div class="kicker"><i>00</i> · 新手入门 · 来自 juicedata/findfriend</div>
-  <h2 style="font-size:54px;margin-top:14px">《抱大腿》（找朋友）<br><span class="hl-good">20 页看懂规则，附案例</span></h2>
+  <h2 style="font-size:54px;margin-top:14px">《抱大腿》（找朋友）<br><span class="hl-good">21 页看懂规则，附案例</span></h2>
   <p class="lead">5 个人、3 副牌，庄家要在牌局中<b>偷偷找一个“大腿”</b>（朋友），和他联手去守住分数。谁是朋友，要等指定的牌打出来才公开。</p></div>
   <div style="display:grid;grid-template-columns:1fr 560px;gap:40px;margin-top:10px;align-items:center">
     <div class="rise" style="--d:.15s">
@@ -282,7 +282,7 @@ html.le-editing .stage [contenteditable] :hover{outline:1px dashed rgba(40,73,21
 </section>
 
 <!-- 5 流程 -->
-<section class="slide a" style="--z:1.45" data-notes="<b>先看整体，再逐个拆开。</b>一局分 6 步：发牌亮主 → 定庄 → 庄家拿底扣底 → 庄家声明朋友牌 → 逐墩出牌 → 结算。<br>后面第 6～18 页，分别对应这六个步骤。">
+<section class="slide a" style="--z:1.45" data-notes="<b>先看整体，再逐个拆开。</b>一局分 6 步：发牌亮主 → 定庄 → 庄家拿底扣底 → 庄家声明朋友牌 → 逐墩出牌 → 结算。<br>后面的页面按这六个步骤依次展开。">
 <div class="in">
   <div class="rise"><div class="kicker"><i>04</i> · 一局的完整流程</div>
   <h2>一局牌分 6 步，后面一步一步讲</h2>
@@ -350,10 +350,39 @@ html.le-editing .stage [contenteditable] :hover{outline:1px dashed rgba(40,73,21
 </div>
 </section>
 
+<!-- 7.5 要不要叫庄 -->
+<section class="slide c" style="--z:1.15" data-notes="<b>这一页是策略，不是规则。</b>规则只规定“能不能亮”，没规定“什么牌该亮”。这里的清单来自仓库里机器人的评分代码（preplay.ts 的 getBidStructureScore、features.ts 的 summarizeHandFeatures），可以当作入门参考。<br><b>好牌五点：</b>主牌多、有王和级牌、成对成套、缺一门、分牌别太多。<br><b>什么时候叫：</b>先看自己是不是台上、手里有没有自己级别的牌；牌好就早亮、多亮张数；牌一般不用硬亮，让别人亮、自己等机会反主也是一种打法。<br>注意：这是经验和机器人的判断，不同玩家可以有不同打法。">
+<div class="in">
+  <div class="rise"><div class="kicker"><i>07</i> · 策略：要不要叫庄</div>
+  <h2>什么样的牌算<span class="hl-good">好牌</span>？什么时候该叫庄？</h2>
+  <p class="lead">规则只管“能不能亮”，不管“该不该亮”。下面的判断来自仓库里机器人的评分逻辑，当入门参考。</p></div>
+  <div class="g2" style="margin-top:20px;grid-template-columns:1fr 1.15fr">
+    <div class="panel rise" style="--d:.15s">
+      <h3>好牌看 5 点</h3>
+      <ul><li><b>主牌多</b>：主花色 + 所有级牌 + 大小王，越多越稳</li><li><b>有控制牌</b>：大小王最关键，其次是级牌</li><li><b>成对成套</b>：主牌里有对子、刻子、拖拉机</li><li><b>缺一门</b>：某个副牌花色没牌，将来可以毙牌</li><li><b>分牌别太多</b>：5、10、K 太多容易被抠走</li></ul>
+      <p style="margin-top:8px">亮牌张数也加分：<b>亮 2 张、3 张</b>比亮 1 张更难被反。</p>
+    </div>
+    <div class="rise" style="--d:.3s">
+      <div class="case" style="background:rgba(200,238,227,.7);color:#066b5a"><span class="ct" style="background:var(--teal)">适合叫庄</span> 你是 7 级、台上（只列关键牌）
+        <div class="hand" style="margin:8px 0 4px;flex-wrap:nowrap"><i class="pc jk big r">大<b>王</b></i><span class="gap" style="width:8px"></span><i class="pc r t">7<b>♥</b></i><i class="pc r t">7<b>♥</b></i><i class="pc t">7<b>♠</b></i><span class="gap" style="width:8px"></span><i class="pc r">A<b>♥</b></i><i class="pc r">A<b>♥</b></i><i class="pc r">K<b>♥</b></i><i class="pc r">K<b>♥</b></i></div>
+        <span style="font-size:15.5px">有大王、一对级牌、成对的大主牌，而且梅花可能是缺门 → 先亮<b style="color:#044f42">两张 7♥</b> 占位，主花色 ♥。</span></div>
+      <div class="warn" style="margin-top:14px"><b style="color:#a3301d">不如先等</b> 你是 7 级、台上，但：
+        <div class="hand" style="margin:8px 0 4px;flex-wrap:nowrap"><i class="pc">7<b>♣</b></i><i class="pc">A<b>♠</b></i><i class="pc r" data-p="10">K<b>♦</b></i><i class="pc" data-p="10">10<b>♣</b></i><i class="pc r">9<b>♦</b></i><i class="pc" data-p="5">5<b>♠</b></i><i class="pc r">4<b>♥</b></i></div>
+        <span style="font-size:15.5px">只有 1 张级牌，主牌少、全是散牌、分牌还多 → 别硬亮，当庄后底牌和朋友都难办。</span></div>
+    </div>
+  </div>
+  <div class="g3 rise" style="--d:.45s;margin-top:18px;grid-template-columns:repeat(3,1fr);gap:20px">
+    <div class="tip"><b>先看资格：</b>台上、且有自己级别的牌，才能自己当庄。</div>
+    <div class="tip"><b>牌好早亮：</b>发牌中途就能亮，好牌直接亮对子甚至刻子。</div>
+    <div class="tip"><b>牌一般不硬亮：</b>没人亮就翻底定庄；等别人亮再反，也是一种打法。</div>
+  </div>
+</div>
+</section>
+
 <!-- 8 扣底与朋友牌 -->
 <section class="slide d" style="--z:1.25" data-notes="<b>庄家先扣底。</b>庄家把 7 张底牌拿起来，手里变 38 张，再自己选 7 张扣下，底牌里可以包含分牌和主牌。<br><b>然后公开声明朋友牌：</b>形式是“第 N 张 某花色某点数”，N 可以是 1/2/3。关键限制：朋友牌必须是副牌，不能是王、不能是本局级牌、有主局里也不能是主花色的牌。<br>案例：本局庄家小丙 9 级，主花色是♠。可以指定第 2 张 ♦A、第 1 张 ♥K；不能指定大王、任何 9、♠A（主花色）。">
 <div class="in">
-  <div class="rise"><div class="kicker"><i>07</i> · 扣底与指定朋友</div>
+  <div class="rise"><div class="kicker"><i>08</i> · 扣底与指定朋友</div>
   <h2>庄家扣底后，要公开指定一张<span class="hl-good">“朋友牌”</span></h2></div>
   <div class="g2" style="margin-top:22px;grid-template-columns:1fr 1.2fr">
     <div class="rise" style="--d:.15s">
@@ -376,7 +405,7 @@ html.le-editing .stage [contenteditable] :hover{outline:1px dashed rgba(40,73,21
 <!-- 9 朋友现身 -->
 <section class="slide a" style="--z:1.5" data-notes="<b>谁是朋友？</b>庄家指定的第 N 张目标牌，由“庄家以外的人”打出的那一刻，这个人就公开成为朋友。他在这之前赢的墩和分，也一起算进庄家方。<br><b>三种“没找到”：</b>目标牌扣在底牌里；整局结束次数不足；指定的那一次是庄家自己打出的（庄家不能当自己的朋友，失败是立刻判定）。<br>找不到朋友就变成一打四，闲家要 180 分，庄家赢了直接最终胜利，所以这是一个有风险也有机会的选择。<br>另外：朋友现身前，任何人不得用语言或手势暗示自己有没有这张牌。">
 <div class="in">
-  <div class="rise"><div class="kicker"><i>08</i> · 朋友现身</div>
+  <div class="rise"><div class="kicker"><i>09</i> · 朋友现身</div>
   <h2>第 N 张目标牌被<span class="hl-good">别人</span>打出，那个人就是朋友</h2></div>
   <div class="g2" style="margin-top:20px;grid-template-columns:1.15fr 1fr">
     <div class="rise" style="--d:.15s">
@@ -403,7 +432,7 @@ html.le-editing .stage [contenteditable] :hover{outline:1px dashed rgba(40,73,21
 <!-- 10 主牌牌序 -->
 <section class="slide b" style="--z:1.5" data-notes="<b>这是新手最容易晕的一页：</b>本局级牌（比如 9）不再放在普通牌序里，而是升入主牌区；同时，主花色的所有牌也都变成主牌。<br>有主局主牌从大到小：大王 > 小王 > 主花色级牌 > 副级牌（其他三个花色的级牌，彼此同大）> 主花色的其他普通牌。<br>同一墩里同大的牌，先打出的赢。非主花色按 A K Q J 10 9 … 的顺序，把级牌点数“抽走”。无主局：只有 大王 > 小王 > 级牌 这三档。<br>牌门：每个非主花色各自一门，所有主牌合为一门。">
 <div class="in">
-  <div class="rise"><div class="kicker"><i>09</i> · 主牌与牌序</div>
+  <div class="rise"><div class="kicker"><i>10</i> · 主牌与牌序</div>
   <h2>级牌和主花色牌，全部升入“<span class="hl-good">主牌区</span>”</h2></div>
   <div class="rise" style="--d:.15s;margin-top:18px">
     <div style="font-size:16px;color:var(--ink2);margin-bottom:12px">案例：本局 <b>级牌 7、主花色 ♥</b>。有主局的主牌，从大到小：</div>
@@ -426,7 +455,7 @@ html.le-editing .stage [contenteditable] :hover{outline:1px dashed rgba(40,73,21
 <!-- 11 牌型 -->
 <section class="slide c" style="--z:1.15" data-notes="<b>这里是本游戏最特别的地方：</b>除了常规的单张、对子、拖拉机，还多了“刻子”（三张完全相同的牌）。<br>“完全相同”指的是同点数且同花色（三副牌里三张一样的）。大小王也可以组成对子和刻子。<br>拖拉机就是在该门里“连续的对子/刻子”。副牌拖拉机要看“抽走级牌之后”的连续关系，比如级牌是 8，♠7♠7 和 ♠9♠9 就是连对，因为 8 被抽走。<br>主牌拖拉机可以跨越类别，比如 小王对 + 大王对、主花色级牌对 + 小王对。">
 <div class="in">
-  <div class="rise"><div class="kicker"><i>10</i> · 合法牌型</div>
+  <div class="rise"><div class="kicker"><i>11</i> · 合法牌型</div>
   <h2>单张、对子、<span class="hl-good">刻子</span>、拖拉机：出牌的“结构”</h2>
   <p class="lead">“完全相同”＝<b>同点数 + 同花色</b>（3 副牌里才会有 3 张一样的）。</p></div>
   <div class="g2" style="margin-top:18px">
@@ -453,7 +482,7 @@ html.le-editing .stage [contenteditable] :hover{outline:1px dashed rgba(40,73,21
 <!-- 12 跟牌 -->
 <section class="slide d" style="--z:1.4" data-notes="<b>跟牌的核心：先跟门，再跟牌型，都“尽最大能力”。</b>有该门的牌必须跟该门，且尽量跟足张数；该门不够就全部打出，剩下的用别的牌补；完全没有该门就可以垫牌或毙牌。<br>领出对子时：有对子必须跟对子，没有对子才能跟两张散牌；不能为了保留大牌拆散本来能凑出的牌型。<br>案例里小乙领 ♠K♠K 对子，四家分别遇到四种情况。">
 <div class="in">
-  <div class="rise"><div class="kicker"><i>11</i> · 出牌与跟牌</div>
+  <div class="rise"><div class="kicker"><i>12</i> · 出牌与跟牌</div>
   <h2>领出什么门，就必须<span class="hl-good">尽力跟什么门、什么牌型</span></h2>
   <p class="lead">庄家先领第一墩，之后每一墩由<b>上一墩的赢家领出</b>，其余人按逆时针依次跟牌。</p></div>
   <div class="g2" style="margin-top:20px;grid-template-columns:1fr 1.45fr">
@@ -477,7 +506,7 @@ html.le-editing .stage [contenteditable] :hover{outline:1px dashed rgba(40,73,21
 <!-- 13 一墩胜负 & 毙牌 -->
 <section class="slide a" style="--z:1.4" data-notes="<b>一墩谁赢？</b>只有完整对应了领出牌型的出牌，才有资格争夺这一墩。单张比单张，对子比对子点数，拖拉机比最高一对。同大的牌，先出的赢。<br><b>毙牌：</b>领出的是副牌，没有该门的人可以用主牌毙。但主牌必须张数、结构都对得上领出牌型才是有效毙牌，否则只算垫牌。<br>案例：小戊用主牌 ♥3 毙掉了 ♠K 这一墩，收下 25 分并领出下一墩。">
 <div class="in">
-  <div class="rise"><div class="kicker"><i>12</i> · 一墩胜负与毙牌</div>
+  <div class="rise"><div class="kicker"><i>13</i> · 一墩胜负与毙牌</div>
   <h2>没有该门的牌？用<span class="hl-good">主牌毙</span>，主牌压副牌</h2></div>
   <div class="rise" style="--d:.15s;margin-top:20px">
     <div class="case"><span class="ct">案例</span> 本局主花色 ♥。小乙领出单张 ♠K：
@@ -502,7 +531,7 @@ html.le-editing .stage [contenteditable] :hover{outline:1px dashed rgba(40,73,21
 <!-- 14 甩牌 -->
 <section class="slide b" style="--z:1.5" data-notes="<b>甩牌是进阶玩法，初学者可以先了解概念。</b>领出的人可以一次甩出同一门里的多个牌组（比如刻子+对子+单张），但不能混合不同花色，也不能混合主牌和副牌。<br>甩牌要成功，每一个牌组都必须“不可能被别人压过”。否则甩牌失败：你被迫改出“最小的、会被压的那一个牌组”（先比张数最少，再比点数最低）。失败不扣分。<br>案例：想甩 ♠A + ♠K，但别人手里还有一张 ♠A，能压住 ♠K，所以失败，被迫只出 ♠K。">
 <div class="in">
-  <div class="rise"><div class="kicker"><i>13</i> · 甩牌（进阶）</div>
+  <div class="rise"><div class="kicker"><i>14</i> · 甩牌（进阶）</div>
   <h2>一次甩出多个牌组：<span class="hl-good">每一组都压不住</span>才算成功</h2></div>
   <div class="g2" style="margin-top:22px">
     <div class="panel rise" style="--d:.15s">
@@ -520,7 +549,7 @@ html.le-editing .stage [contenteditable] :hover{outline:1px dashed rgba(40,73,21
 <!-- 15 得分与抠底 -->
 <section class="slide c" style="--z:1.5" data-notes="<b>抠底是翻盘的关键。</b>如果最后一墩是庄家方赢，底牌就不计入闲家分；如果最后一墩是闲家赢，就翻开底牌，把底牌里的分乘以一个倍数后加给闲家。<br>倍数由“最后一墩赢的牌型”决定：单张×2、对子×4、刻子×6，对子拖拉机含 n 对×2的n次方，刻子拖拉机含 n 个×3的n次方。<br>案例：底牌 25 分，闲家用两连对赢最后一墩，×4=100，闲家本来只有 60 分，变成 160，超过 140，反败为胜。">
 <div class="in">
-  <div class="rise"><div class="kicker"><i>14</i> · 得分与抠底</div>
+  <div class="rise"><div class="kicker"><i>15</i> · 得分与抠底</div>
   <h2>最后一墩很关键：闲家赢了，要<span class="hl-good">翻底牌乘倍数</span></h2></div>
   <div class="g2" style="margin-top:20px;grid-template-columns:1.1fr 1fr">
     <div class="rise" style="--d:.15s">
@@ -548,7 +577,7 @@ html.le-editing .stage [contenteditable] :hover{outline:1px dashed rgba(40,73,21
 <!-- 16 胜负线与升级 -->
 <section class="slide d" style="--z:1.3" data-notes="<b>胜负线：</b>正常局闲家≥140 赢；一打四闲家≥180 赢。<br><b>升级规则要点：</b>先看“基础奖励”——胜方里本局开始就在台上的人升 1 级；本局开始在台下的人，基础奖励变成“上台”，不涨级。再看“额外升级”，每个人独立计算。<br>庄家方赢：闲家分 70 到胜负线以下 +0；1～69 分 +1；0 分 +2。闲家方赢：正常局每多完整的 70 分额外 +1，一打四每多 90 分 +1。<br>案例里闲家拿到 235：额外 ⌊(235-140)/70⌋=1，台上的闲家升 2 级，台下的闲家上台并升 1 级，庄家方全部下台。">
 <div class="in">
-  <div class="rise"><div class="kicker"><i>15</i> · 胜负线与升级</div>
+  <div class="rise"><div class="kicker"><i>16</i> · 胜负线与升级</div>
   <h2>140 分是正常局的“生死线”，<span class="hl-good">多拿分还能多升级</span></h2></div>
   <div class="rise" style="--d:.15s;margin-top:18px">
     <div class="bar2" style="grid-template-columns:130px 1fr 110px"><span>闲家 235 分</span><div class="track" style="height:30px"><div class="fill" style="--w:78%"></div><div class="mark" style="left:46.7%"></div><div class="mark" style="left:23.3%;background:#b8b2a5"></div><div class="mark" style="left:70%;background:#b8b2a5"></div></div><span class="v">0 ~ 300</span></div>
@@ -570,7 +599,7 @@ html.le-editing .stage [contenteditable] :hover{outline:1px dashed rgba(40,73,21
 <!-- 17 A 级与最终胜利 -->
 <section class="slide a" style="--z:1.5" data-notes="<b>怎么才算“赢下整场游戏”？</b>级别到 A 就封顶，不会循环回 2，也不会立刻赢。<br>四种最终胜利：① 一打四时，庄家赢了这一局，直接赢整场（不看级别）；② A 级玩家亲自当庄，并且找到朋友的正常局里赢；③ A 级玩家被找到成为朋友，台上状态下庄家方赢且闲家低于 60 分；④ 如果这个 A 级朋友在台下，要闲家得 0 分才行。<br>多人同时满足则共同获胜。">
 <div class="in">
-  <div class="rise"><div class="kicker"><i>16</i> · A 级与最终胜利</div>
+  <div class="rise"><div class="kicker"><i>17</i> · A 级与最终胜利</div>
   <h2>升到 A 只是封顶，要赢下<span class="hl-good">整场</span>还得满足条件</h2>
   <p class="lead">A 之后不会循环回 2，也不会自动赢。想拿“最终胜利”，有这几条路：</p></div>
   <div class="g2" style="margin-top:22px;grid-template-columns:1.1fr 1fr">
@@ -593,7 +622,7 @@ html.le-editing .stage [contenteditable] :hover{outline:1px dashed rgba(40,73,21
 <!-- 18 完整案例 -->
 <section class="slide b" style="--z:1.35" data-notes="<b>用迷你版把前面所有规则串一遍。</b>全员 5 级、台上。小乙亮两张 5♥，小丙亮三张 5♣ 反主（三张＞两张）。五人确认不反后，小丙是庄家。小丙扣底后指定“第 2 张 ♦A”。第 4 墩小丁打出第 2 张 ♦A，成为朋友。最终闲家 120 分，没到 140，庄家方赢。因为闲家 ≥70，所以庄家方基础升 1 级、没有额外。小丙、小丁从 5 升到 10，其余三家下台。">
 <div class="in">
-  <div class="rise"><div class="kicker"><i>17</i> · 完整案例</div>
+  <div class="rise"><div class="kicker"><i>18</i> · 完整案例</div>
   <h2>用<span class="hl-good">迷你版</span>走一遍完整的一局</h2>
   <p class="lead">五人：小甲、小乙、小丙、小丁、小戊，全员 <b>5 级 · 台上</b>（迷你版 5 → 10 → K → A）。</p></div>
   <div class="flow rise" style="--d:.15s;margin-top:22px">
@@ -613,7 +642,7 @@ html.le-editing .stage [contenteditable] :hover{outline:1px dashed rgba(40,73,21
 <!-- 19 常见误区 -->
 <section class="slide c" style="--z:1.35" data-notes="<b>新手最容易错的几件事。</b>建议对照前面案例，逐条自测。">
 <div class="in">
-  <div class="rise"><div class="kicker"><i>18</i> · 新手易错点</div>
+  <div class="rise"><div class="kicker"><i>19</i> · 新手易错点</div>
   <h2>这 6 件事，新手最容易记反</h2></div>
   <div class="g3" style="margin-top:22px;grid-template-columns:1fr 1fr;gap:20px 40px;align-items:stretch">
     <div class="panel rise" style="--d:.1s"><h3 style="color:var(--coral)">✗ “级牌最小”</h3><p>错。本局级牌（还有主花色牌）会<b>升入主牌区</b>，比所有副牌都大；A 虽是最大的普通牌，但级牌 7 成了主牌后，比任何副牌 A 都大。</p></div>
@@ -629,7 +658,7 @@ html.le-editing .stage [contenteditable] :hover{outline:1px dashed rgba(40,73,21
 <!-- 20 试玩与源码 -->
 <section class="slide d" style="--z:1.5" data-notes="<b>想亲手玩一下：</b>仓库自带 Docker，一条命令就能起服务。空座会由机器人补满，所以一个人也能玩；迷你版 5→10→K→A，一整场很快打完。<br><b>想看规则怎么落到代码：</b>规则引擎全部在 packages/shared/src。bids.ts 是亮主反主，friend.ts 是朋友牌，patterns.ts 是牌型，follow.ts 是跟牌，lead.ts 是甩牌，trick.ts 是一墩胜负，scoring.ts 是结算升级，ranking.ts 是牌序，levels.ts 是级别。每个文件旁边都有对应测试。">
 <div class="in">
-  <div class="rise"><div class="kicker"><i>19</i> · 动手试玩与源码导读</div>
+  <div class="rise"><div class="kicker"><i>20</i> · 动手试玩与源码导读</div>
   <h2>一条命令开一局，机器人自动<span class="hl-good">补满空座</span></h2></div>
   <div class="g2" style="margin-top:22px;grid-template-columns:1fr 1.1fr">
     <div class="rise" style="--d:.15s">
